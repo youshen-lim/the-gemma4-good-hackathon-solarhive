@@ -2895,6 +2895,16 @@ model.save_pretrained("solarhive_lora")
 tokenizer.save_pretrained("solarhive_lora")
 print("✅ LoRA adapters saved to solarhive_lora/")
 
+# Copy E4B LoRA to Drive for persistence across sessions
+_drive_e4b_lora_path = "/content/drive/MyDrive/models/solarhive_e4b_lora"
+try:
+    import shutil as _shutil_e4b
+    _shutil_e4b.copytree("solarhive_lora", _drive_e4b_lora_path, dirs_exist_ok=True)
+    print(f"✅ E4B LoRA copied to Google Drive: {_drive_e4b_lora_path}")
+except Exception as e:
+    print(f"⚠️  Drive copy failed (non-blocking): {e}")
+    print("   Manually copy: !cp -r solarhive_lora /content/drive/MyDrive/models/")
+
 # Export to GGUF (q4_k_m quantization for Ollama)
 # Unsloth handles Gemma 4 VLM export: produces model GGUF + mmproj GGUF (vision projector).
 # Requires Unsloth's patched llama.cpp — ensure Cell 0 installs latest unsloth.
