@@ -1,3 +1,5 @@
+![SolarHive — AI-Powered Community Solar Energy Intelligence](SolarHive_HeaderImage_1280x640_GitHub%20Repo%20Header.png)
+
 # SolarHive
 ## AI-Powered Community Solar Energy Intelligence
 
