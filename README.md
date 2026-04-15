@@ -1,12 +1,12 @@
 # SolarHive
-## AI-Powered Community Energy Intelligence
+## AI-Powered Community Solar Energy Intelligence
 
-> **Gemma 4 Good Hackathon** — Google DeepMind × Kaggle
-> **Track:** Global Resilience · Climate & Green Energy
-> **Special Technology Tracks:** Ollama · Unsloth
+> **The Gemma 4 Good Hackathon** — Google DeepMind x Kaggle
+> **Track:** Global Resilience
+> **Special Technology Tracks:** Ollama, Unsloth
 
 [![Kaggle](https://img.shields.io/badge/Kaggle-Gemma%204%20Good%20Hackathon-20BEFF?logo=kaggle)](https://kaggle.com/competitions/gemma-4-good-hackathon)
-[![Model](https://img.shields.io/badge/Gemma%204-26B%20MoE-4285F4?logo=google)](https://kaggle.com/models/google/gemma-4)
+[![Model](https://img.shields.io/badge/Gemma%204-26B%20A4B-4285F4?logo=google)](https://kaggle.com/models/google/gemma-4)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20Inference-black?logo=ollama)](https://ollama.com/library/gemma4)
 [![Unsloth](https://img.shields.io/badge/Unsloth-Fine--Tuned-FF6B35)](https://unsloth.ai)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -32,6 +32,24 @@ Powered by Gemma 4, it transforms fragmented household-level solar data
 into a unified, conversational, visual community energy picture —
 helping suburban neighborhoods collectively optimize their distributed
 solar generation and shared battery storage.
+
+---
+
+## Why This Matters to Me
+
+I chose Ann Arbor, Michigan as SolarHive's prototype location because I live here — after years in New York and Boston. Ann Arbor's low-lying suburban landscape eliminates the shading complications of high-rise cities, making it an ideal testbed for community solar.
+
+My motivation runs deeper than a hackathon:
+
+**The dream of household energy production.** Every home in a community is a potential energy producer and consumer — a clean energy island. Community-based storage using batteries and fuel cells (solid oxide or salt-based) can capture surplus energy to compensate for solar's low production efficiency. This dream was sparked during my undergraduate years at the National University of Singapore, where electives in green energy, atmospheric chemistry, and evolutionary biology taught me the deep connection between photosynthesis, carbon sequestration, and Earth's climate systems.
+
+**Live grids for critical infrastructure.** Decentralized energy generation can supplement existing grids for burstable demands — hospitals, AI-optimized data centers, telecommunications networks, traffic systems, and solar-powered seawater desalination plants like the one announced in Yeosu, South Korea.
+
+**The unsolved side of the energy equation.** In 2024, I visited Schneider Electric's headquarters in Paris to learn from chief executives including former Group CFO Hilary Maxson. While strong private-sector players like Schneider have solved many problems in energy *distribution*, the other side of the equation — energy *production* and source diversity — remains a global challenge. That visit refocused my research on production.
+
+**Singapore's example.** My home country continues to invest actively in energy production diversification, providing real-world case studies for household energy generation and community storage.
+
+**A personal stake in the future.** My wife and I are expecting our firstborn — a girl we are naming Gemma. The coincidence with Google's model name is not lost on me. I need to play my part, however small, to help pave the way for future generations rather than leave our problems to them.
 
 ---
 
@@ -76,7 +94,7 @@ can move.
 
 **Temperature and thermal losses:** Panel efficiency drops 0.4–0.5%
 per degree Celsius above 25°C. A hot summer day at 40°C can reduce
-output by 7–8% from thermal effects alone.
+output by 6–7.5% from thermal effects alone.
 
 **Optical reflection losses:** Light bouncing off the panel surface
 rather than being absorbed. Anti-reflective coatings help but cannot
@@ -154,8 +172,8 @@ is the brain that orchestrates these flows.
 ## How Gemma 4 Powers SolarHive
 
 SolarHive leverages three core Gemma 4 capabilities, directly aligned
-with what the hackathon demands: **multimodal power** and **native
-function calling**.
+with what the hackathon demands: **multimodal power**, **native
+function calling**, and **domain-adapted fine-tuning**.
 
 ---
 
@@ -172,9 +190,12 @@ community battery state, and responds with a grounded, actionable
 forecast — multimodal vision and native tool calling working together
 in a single agentic turn.
 
-> *"I see scattered cumulus clouds with roughly 40% sky coverage moving
-> east. Expect production to dip 30% over the next two hours. Storage
-> is healthy at 72%, so no action needed."*
+> *"The image shows heavy, uniform overcast conditions with thick gray
+> cloud cover obscuring the sun completely. This type of overcast sky
+> typically reduces solar production to 10-25% of clear-sky capacity.
+> At this moment, expect roughly 10-25 kW community output from your
+> 72 kW array. This is a good time to conserve battery for evening
+> peak hours and defer non-essential loads."*
 
 #### VQA Mode 2 — Panel Health Inspection
 
@@ -211,10 +232,10 @@ control tokens (`<|tool_call>` and `<|tool_response>`).
 
 | Tool | API | Returns |
 |------|-----|---------|
-| `get_weather(location)` | OpenWeatherMap | Cloud cover %, temperature, wind, humidity |
-| `get_solar_production(clouds_pct)` | NREL PVWatts model | Community kW production estimate |
+| `get_weather(location)` | OpenWeatherMap | Temperature, clouds %, wind, humidity, sunrise/sunset |
+| `get_solar_production(clouds_pct, temp_f)` | Open-Meteo GHI | Production kW, efficiency %, GHI W/m², temp derating |
 | `get_battery_state()` | Community BMS | State of charge, capacity, charging status |
-| `get_grid_status()` | EIA Open Data | Pricing period (peak/mid/off-peak), rate/kWh |
+| `get_grid_status()` | EIA Open Data | Pricing period, rate/kWh, renewable %, CO2 intensity |
 
 **The four-stage agentic loop:**
 
@@ -226,11 +247,13 @@ Stage 1 — Tool Definition
           ↓
 Stage 2 — Model Decides
   Gemma 4 analyzes the question, reasons about which data it needs,
-  and emits structured <|tool_call> tokens requesting specific tools.
+  and emits structured tool_call tokens requesting specific tools.
           ↓
 Stage 3 — Developer Executes
-  Code intercepts each tool_call, executes the real API request
-  (OpenWeatherMap, NREL, EIA), feeds results back via tool_responses.
+  Code intercepts each tool_call via regex parsing (call:fn_name{args}),
+  executes the real API request (OpenWeatherMap, Open-Meteo, EIA),
+  feeds results back as {"role": "tool", "name": ..., "content": ...}
+  messages, and loops up to 3 rounds.
           ↓
 Stage 4 — Model Responds
   Gemma 4 reads the tool results and synthesizes a final,
@@ -277,25 +300,40 @@ result = solarhive_agent(
 
 ---
 
-### Feature 3 — Fine-Tuned Domain Expert (Unsloth + Ollama)
+### Feature 3 — Dual Fine-Tuned Domain Expert (Unsloth + Ollama)
 
-**Model:** Gemma 4 E4B fine-tuned on solar energy community Q&A using
-Unsloth QLoRA, exported to GGUF, and served locally via Ollama.
+Two models fine-tuned on 1,029 community solar energy examples using
+Unsloth QLoRA, targeting both cloud and edge deployment:
 
-> **Note:** Gemma 4 E4B is the text-optimized edge model (4B params,
-> fits on T4 16GB in 4-bit). It is purpose-built for local deployment
-> on resource-constrained hardware. Multimodal VQA (sky photos, panel
-> inspection) is handled by the Gemma 4 26B MoE model in the inference
-> notebook.
+| Model | Role | Training | Export |
+|-------|------|----------|--------|
+| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | QLoRA r=16, 4,266s | LoRA adapters |
+| Gemma 4 E4B (8B) | Edge deployment via Ollama | QLoRA r=16, 257s | LoRA → Ollama |
 
-**Fine-tuning pipeline:**
-```
-Gemma 4 E4B (base)
-    → Unsloth QLoRA (r=16, energy domain Q&A data)
-    → SFT on community solar scenarios
-    → GGUF export (q4_k_m quantization)
-    → Ollama local deployment
-```
+**Training data:** 929 Q&A across 9 energy domains + 100 tool-calling
+examples (50 with tool invocations, 50 without — teaching the model
+when NOT to call tools). Two complementary sources:
+
+- **413 hand-crafted static examples** spanning 15+ US cities, covering
+  sky conditions, battery management, panel health, consumption
+  optimization, community/grid strategy, emergency resilience, seasonal
+  planning, multi-step reasoning, and alternative storage
+- **501 API-grounded examples** generated from live Open-Meteo, PVWatts,
+  OpenWeatherMap, and EIA data for Ann Arbor, MI and San Mateo, CA —
+  including hourly production scenarios, PVWatts cross-validation,
+  grid mix analysis, weather impact, and battery/grid strategy
+
+**Shared hyperparameters:** LoRA rank=16, alpha=16, dropout=0,
+target=all-linear, lr=2e-4, optimizer=adamw_8bit, warmup=5 steps,
+max_seq_len=2048, precision=BF16, seed=3407. Batch size auto-tuned
+by free GPU VRAM at runtime.
+
+**Training results (Google Colab G4 VM, RTX PRO 6000, BF16):**
+
+| Model | Converged Loss | Trainable Params | Benchmark Q&A | Benchmark Tool-Calling | Time |
+|-------|---------------|-----------------|---------------|----------------------|------|
+| Gemma 4 26B A4B | **0.742** | 29.6M / 25.8B (0.11%) | 5/5 | 3/3 | 4,266s |
+| Gemma 4 E4B | **1.059** | 41.2M / 8.0B (0.51%) | 5/5 | 3/3 | 257s |
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama means
 community energy data never leaves the neighborhood. No cloud
@@ -307,25 +345,123 @@ runs where the community lives.
 ## Architecture
 
 ```
-User (dashboard / mobile)
-        ↓
-React Frontend  ──────────────────────────────────────────
-(Vercel, free tier)                                       |
-        ↓  REST API                                       |
-FastAPI Backend                                           |
-        ├── Gemma 4 Agent (Ollama, local-first)           |
-        │     ├── VQA Mode 1: Sky analysis                |
-        │     ├── VQA Mode 2: Panel inspection            |
-        │     ├── VQA Mode 3: Aerial assessment           |
-        │     └── Native function calling:                |
-        │           ├── get_weather()   → OpenWeatherMap  |
-        │           ├── get_solar()     → NREL PVWatts    |
-        │           ├── get_battery()   → Community BMS   |
-        │           └── get_grid()      → EIA API         |
-        └── Simulation Engine                             |
-              └── 12-home neighborhood model              |
-                  (NREL NSRDB + Pecan Street baselines) ──┘
+Three Colab Notebooks — the complete pipeline:
+
+solarhive_datagen.py     Data generation: 4 live APIs → 551 training examples
+        ↓                + 12 diagnostic charts
+solarhive_finetune.py    Dual QLoRA fine-tuning via Unsloth
+        ↓                E4B (257s) + 26B A4B (4,266s)
+solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
+                         + 3 VQA modes + agentic loop + benchmarks
+
+Hardware: Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell
+          Server Edition (96 GB GDDR7), BF16 precision
+Cost:     $0 (Colab free tier)
 ```
+
+**Agentic loop (Cell 4):**
+1. System prompt repeated twice — improves instruction following in causal
+   LLMs ([Leviathan et al., 2024, Google Research](https://arxiv.org/abs/2512.14982))
+2. Tools defined as Python functions with typed signatures → auto-schema
+3. Two-step tokenization (critical for transformers 5.5.x compatibility)
+4. Model emits `call:fn_name{args}` → parsed via regex
+5. Real APIs execute, results fed back as tool messages
+6. Loop up to 3 rounds → final grounded response
+
+**LoRA loading (Cell 2b):**
+Fine-tuned adapters loaded via Unsloth's `FastVisionModel` — standard
+PEFT cannot handle Gemma 4's `Gemma4ClippableLinear` and MoE expert
+layers.
+
+---
+
+## Live Demo Output (Inference Run 5, April 15 2026)
+
+Five interactive queries against the fine-tuned Gemma 4 26B A4B with LoRA
+adapters loaded via Unsloth. Real sky photos from Ann Arbor uploaded during
+the session. All tool calls hit live APIs (OpenWeatherMap, Open-Meteo, EIA).
+
+**Query 1 (VQA Mode 1: sky photo uploaded)**
+> **Q:** "How is current cloud cover affecting potential household solar production?"
+>
+> **Image:** `annarbor_sky_5.jpeg` (heavy overcast)
+>
+> **Tools called:** none (direct visual answer)
+>
+> **A:** "The image shows heavy, uniform overcast conditions with thick gray
+> cloud cover obscuring the sun completely. This type of overcast sky
+> typically reduces solar production to 10-25% of clear-sky capacity.
+> At this moment, expect roughly 10-25 kW community output from your
+> 60 kW array.* This is a good time to conserve battery for evening
+> peak hours and defer non-essential loads."
+
+*\*Known hallucination: the model says "60 kW" instead of the correct
+72 kW community capacity. This is a pre-fine-tune base model tendency
+that persists in early LoRA runs. The model correctly uses 72 kW in
+other responses (see Query 2). Addressing this through additional
+fine-tuning examples is planned for the next training run.*
+
+**Query 2 (tool calling: solar production)**
+> **Q:** "What was estimated solar production at 9.00am Eastern time?"
+>
+> **Tools called:** `get_solar_production`
+>
+> **A:** "At 9:00am in Ann Arbor, MI, the community produced 40.4 kW out
+> of 72 kW capacity (56.1% efficiency). GHI was 660.0 W/m² with 10%
+> cloud cover and no temperature derating at 65°F. This is a solid
+> early morning output, production will ramp up toward the noon peak."
+
+**Query 3 (VQA + energy storage planning: sky photo uploaded)**
+> **Q:** "Referring to the cloud cover in attached image, how should I plan
+> my household solar production and energy storage (e.g., battery or
+> fuel cell) for the next two hours?"
+>
+> **Image:** `annarbor_sky_03.jpeg` (broken cumulus)
+>
+> **Tools called:** none (direct visual answer)
+>
+> **A:** "The image shows heavy, broken cumulus and stratocumulus clouds
+> covering approximately 80-90% of the sky. While there are some brighter
+> patches suggesting intermittent direct sunlight, the overall irradiance
+> is significantly reduced. Production will be highly variable, cycling
+> between 15-30% of capacity during cloud gaps and dropping to 5-10%
+> under the thicker gray patches. For the next two hours: expect
+> inconsistent production with no sustained peak output. If your battery
+> is below 50%, prioritize essential loads only and avoid running heavy
+> appliances during the darker cloud passages. If you have a fuel cell,
+> it may be worth running at a low steady rate to supplement the
+> intermittent solar."
+
+**Query 4 (tool calling: grid status)**
+> **Q:** "What is current grid capacity now? And how has it changed over the
+> past two hours?"
+>
+> **Tools called:** `get_grid_status`
+>
+> **A:** "Peak pricing at $0.28/kWh with 30.3% renewable grid mix. CO2
+> intensity is 381.5 kg/MWh. Peak rates typically run 2-7pm, prioritize
+> battery discharge and minimize grid imports."
+
+**Query 5 (tool calling: weather)**
+> **Q:** "What is the weather forecast going to be like this week in Ann
+> Arbor and how should we plan for it?"
+>
+> **Tools called:** `get_weather`
+>
+> **A:** "Current conditions in Ann Arbor: 67°F with 100% cloud cover and
+> mist. Production is likely minimal at this moment. With 100% cloud
+> cover, expect significantly reduced solar output, run only essential
+> loads and preserve battery for evening peak. If this overcast pattern
+> persists through the week, consider pre-charging the battery from the
+> grid during off-peak hours to ensure coverage."
+
+---
+
+## Community Model
+
+**Location:** Ann Arbor, Michigan (42.2808°N, 83.7430°W)
+**Community:** 12 homes, 72 kW total panel capacity, 100 kWh shared battery
+**Grid region:** MISO (Midcontinent Independent System Operator)
 
 ---
 
@@ -333,78 +469,110 @@ FastAPI Backend                                           |
 
 ```
 the-gemma4-good-hackathon-solarhive/
-├── solarhive_inference.py    # Gemma 4 26B inference: VQA (3 modes) +
-│                             # native function calling + agentic loop
-├── solarhive_finetune.py     # Unsloth QLoRA fine-tuning: E4B →
-│                             # GGUF → Ollama deployment pipeline
-├── simulation.py             # 12-home neighborhood simulation engine
-│                             # (NREL NSRDB + Pecan Street) [Phase 4]
-├── backend.py                # FastAPI REST API backend [Phase 4]
-├── frontend/                 # React dashboard [Phase 5]
-│   ├── src/
-│   │   ├── Dashboard.jsx     # Energy flow visualization
-│   │   ├── ChatPanel.jsx     # Gemma 4 chat + image upload
-│   │   └── HomeCard.jsx      # Per-home production/consumption card
-└── README.md
-```
-
----
-
-## Setup
-
-### Kaggle Notebook (recommended for inference)
-
-1. Open a Kaggle Notebook
-2. Settings → Accelerator → **GPU T4 x2**
-3. Add-ons → Secrets: add `OWM_API_KEY`, `NREL_API_KEY`, `EIA_API_KEY`
-4. Upload `solarhive_inference.py` and run cells sequentially
-
-### API Keys Required (all free tier)
-
-| Service | Portal | Free Tier |
-|---------|--------|-----------|
-| OpenWeatherMap | [openweathermap.org/api](https://openweathermap.org/api) | 1,000 calls/day |
-| NREL PVWatts | [developer.nrel.gov](https://developer.nrel.gov) | Unlimited |
-| EIA Open Data | [api.eia.gov](https://www.eia.gov/opendata) | Unlimited |
-
-### Local Deployment via Ollama
-
-```bash
-# After running solarhive_finetune.py to generate the GGUF file:
-
-# Create Modelfile
-cat > Modelfile << 'EOF'
-FROM ./solarhive-gemma4-e4b-q4_k_m.gguf
-SYSTEM "You are SolarHive, an AI energy advisor for a community solar microgrid."
-EOF
-
-# Create and run the model
-ollama create solarhive -f Modelfile
-ollama run solarhive "What is our community battery status?"
+├── README.md                    # This file
+├── LICENSE                      # MIT License
+├── data_principles.md           # Data methodology and training data documentation
+├── datagen_charts/              # 12 diagnostic charts from data generation pipeline
+│   ├── chart_01.png … chart_12.png
+├── solarhive_inference.py       # Gemma 4 26B A4B inference: VQA (3 modes) +
+│                                # native function calling + agentic loop + benchmarks
+├── solarhive_inference.ipynb    # Jupyter notebook version
+├── solarhive_finetune.py        # Unsloth QLoRA dual fine-tuning:
+│                                # E4B + 26B A4B → LoRA adapters
+├── solarhive_finetune.ipynb     # Jupyter notebook version
+├── solarhive_datagen.py         # Data generation: 4 live APIs → training examples
+│                                # + 12 diagnostic charts
+└── solarhive_datagen.ipynb      # Jupyter notebook version
 ```
 
 ---
 
 ## Data Sources
 
-| Source | What It Provides | Cost |
-|--------|-----------------|------|
-| NREL PVWatts v8 API | Solar production estimates by location, roof specs, weather | Free |
-| NREL NSRDB | 30 years hourly solar irradiance data for Ann Arbor, MI | Free |
-| NOAA CDO | Historical weather, cloud cover | Free |
-| OpenWeatherMap API | Real-time weather, cloud cover, forecasts | Free (1K/day) |
-| EIA Open Data API | Grid demand, electricity pricing, peak/off-peak periods | Free |
-| Pecan Street (Kaggle) | 10-home real household solar + consumption at 1-min intervals | Free |
-| EPA AirNow | Air quality data (affects panel efficiency) | Free |
+| Source | What It Provides | Access | Cost |
+|--------|-----------------|--------|------|
+| Open-Meteo | GHI solar irradiance (W/m²), historical hourly | api.open-meteo.com — no API key | Free |
+| OpenWeatherMap | Real-time temperature, wind, humidity, cloud cover, sunrise/sunset | openweathermap.org/api — free API key | Free |
+| EIA Open Data v2 | Grid fuel mix, renewable %, CO2 intensity | api.eia.gov — free API key | Free |
+| NREL PVWatts v8 | Solar production estimates for cross-validation | developer.nrel.gov — free API key | Free |
 
-**Simulation approach:** NREL NSRDB historical data for Ann Arbor, MI
-generates realistic production baselines for a simulated 12-home
-neighborhood. Real-time OpenWeatherMap data is overlaid during demos.
-The community battery is modeled with simple charge/discharge physics.
-Pecan Street sample data provides realistic household consumption curves.
+**Data principles:** All numeric claims trace back to real API responses
+— no synthetic or hallucinated numbers. Full methodology documented in
+[`data_principles.md`](data_principles.md).
 
-In production, synthetic simulation feeds would be replaced by actual
-smart meter and IoT data.
+---
+
+## Data Pipeline Diagnostics (12 Charts from `solarhive_datagen.py`)
+
+All charts generated automatically from live API data during training
+data generation. These visualizations validate data quality, reveal
+geographic patterns, and cross-validate between independent sources.
+
+### Solar Irradiance & Production
+
+| | |
+|:---:|:---:|
+| ![GHI Distribution](datagen_charts/chart_01.png) | ![Hourly Production](datagen_charts/chart_02.png) |
+| **Chart 1:** GHI distribution for Ann Arbor (median 265 W/m²) vs San Mateo (median 364 W/m²) — Michigan receives ~27% less solar irradiance | **Chart 2:** Average hourly production curve (mean ± 1 std). Peak at 1-2pm, Ann Arbor peaks higher but with wider variance |
+| ![Production Heatmap](datagen_charts/chart_03.png) | ![Temperature Derating](datagen_charts/chart_04.png) |
+| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor — flat at 1.0 below 77°F, then linear decline (0.4%/°F). Validates the derating formula in `get_solar_production()` |
+
+### Environmental Correlations
+
+| | |
+|:---:|:---:|
+| ![Correlation Matrix](datagen_charts/chart_05.png) | ![Cloud Cover by Season](datagen_charts/chart_06.png) |
+| **Chart 5:** Feature correlation matrix. GHI→production r=0.97 (near-perfect). Humidity→GHI r=−0.57 (clouds trap moisture). Cloud cover weakly anti-correlated with GHI (r=−0.22) because GHI captures direct + diffuse radiation | **Chart 6:** Cloud cover distribution by season and location. Ann Arbor consistently cloudier than San Mateo across all seasons |
+| ![Seasonal Production](datagen_charts/chart_07.png) | ![GHI vs Production](datagen_charts/chart_08.png) |
+| **Chart 7:** Daytime (7am-6pm) production by season. Summer median ~33 kW (Ann Arbor) vs ~26 kW (San Mateo). Winter drops to ~12 kW for both | **Chart 8:** GHI vs production scatter, colored by cloud cover. Two distinct bands: clear-sky (red, tight linear) and cloudy (blue, scattered). Demonstrates the physics of diffuse vs direct radiation |
+
+### Cross-Validation & Grid Analysis
+
+| | |
+|:---:|:---:|
+| ![PVWatts Cross-Validation](datagen_charts/chart_09.png) | ![OWM Conditions](datagen_charts/chart_10.png) |
+| **Chart 9:** Monthly production — Open-Meteo vs NREL PVWatts. Strong seasonal agreement validates our GHI-based formula against NREL's industry-standard model | **Chart 10:** OWM current conditions snapshot at data generation time — temperature, clouds, wind, humidity for both locations |
+| ![Grid Fuel Mix](datagen_charts/chart_11.png) | ![Renewable & CO2](datagen_charts/chart_12.png) |
+| **Chart 11:** Average fuel mix — MISO (33.5% natural gas, 23.4% wind, 18.8% coal) vs CAISO (35.8% solar, 20.6% wind). CAISO's grid is dramatically cleaner | **Chart 12:** Renewable % and CO2 intensity over one week. CISO hits 100% renewable during midday solar peaks; MISO ranges 20-50%. CO2 intensity inversely tracks renewable share |
+
+---
+
+## Setup
+
+### Google Colab (recommended)
+
+1. Open `solarhive_inference.ipynb` in Google Colab
+2. Runtime → Change runtime type → GPU (A100 or RTX PRO 6000 recommended)
+3. Secrets: add `OWM_API_KEY`, `EIA_API_KEY`
+4. Mount Google Drive (for LoRA adapter cache)
+5. Run cells sequentially
+
+> **Note:** Gemma 4 26B A4B requires ~48 GB VRAM in BF16 or ~16 GB in
+> 4-bit NF4. T4 x2 (32 GB) cannot run this model — BitsAndBytes NF4
+> is incompatible with CPU offloading.
+
+### API Keys Required (all free tier)
+
+| Service | Portal | Free Tier |
+|---------|--------|-----------|
+| OpenWeatherMap | [openweathermap.org/api](https://openweathermap.org/api) | 1,000 calls/day |
+| EIA Open Data | [api.eia.gov](https://www.eia.gov/opendata) | Unlimited |
+| NREL PVWatts | [developer.nrel.gov](https://developer.nrel.gov) | Unlimited |
+
+### Local Deployment via Ollama
+
+```bash
+# After fine-tuning E4B via solarhive_finetune.py:
+# Option 1: Import safetensors directly (GGUF export has known mmproj issue)
+ollama create solarhive -f Modelfile
+
+# Option 2: Pull from HuggingFace (after upload)
+# See HuggingFace model card for instructions
+```
+
+**Local-first, privacy-first:** Running via Ollama means community
+energy data never leaves the neighborhood — no cloud dependency, no
+latency penalty, no data privacy concerns.
 
 ---
 
@@ -414,7 +582,7 @@ smart meter and IoT data.
 
 Global renewable energy curtailment exceeded 50 TWh in 2024 —
 equivalent to the annual electricity consumption of Norway. This
-represents approximately 15–20 million tons of CO₂ emissions that
+represents approximately 15–20 million tons of CO2 emissions that
 could have been avoided but weren't. Clean energy was generated and
 then thrown away because the grid couldn't absorb it.
 
@@ -433,7 +601,7 @@ self-consumption to 60–90%, and intelligent load shifting (the core
 of what SolarHive does) can increase self-consumption by 15–40%
 with **zero additional hardware investment.**
 
-### Quantifiable CO₂ Reduction
+### Quantifiable CO2 Reduction
 
 A 12-home community with 72kW capacity in Ann Arbor generates roughly
 90,000 kWh per year. If SolarHive improves self-consumption from 35%
@@ -443,10 +611,10 @@ coordination — conservative, given that storage alone can reach 80%
 instead of wasted or exported at low value.
 
 Using Michigan's grid emissions factor, that displaces roughly
-**16 tons of CO₂ per year — from software alone, no new hardware
+**16 tons of CO2 per year — from software alone, no new hardware
 required.**
 
-| Scale | CO₂ Displaced Annually |
+| Scale | CO2 Displaced Annually |
 |-------|------------------------|
 | 1 neighborhood (12 homes) | 16 tons |
 | 1,000 neighborhoods | 16,000 tons |
@@ -516,16 +684,14 @@ community-level optimization.
 
 ## Compute Strategy
 
-This project does **not** require expensive GPU cloud services.
+| Task | Platform | GPU | Cost |
+|------|----------|-----|------|
+| Data generation | Google Colab | RTX PRO 6000 (96 GB) | $0 |
+| Fine-tuning (dual QLoRA) | Google Colab | RTX PRO 6000 (96 GB), BF16 | $0 |
+| Inference demo | Google Colab | RTX PRO 6000 (96 GB), BF16 | $0 |
+| Edge deployment | Ollama on laptop | CPU (E2B, 5.1B params) | $0 |
 
-| Task | Platform | Cost |
-|------|----------|------|
-| Prototyping & experimentation | Kaggle Notebooks (T4, 30+ hrs/week free) | $0 |
-| Fine-tuning via Unsloth QLoRA | Kaggle Notebooks or Colab Pro | $0–$10/mo |
-| Live demo inference | Ollama on local machine (quantized) | $0 |
-| Backup / deadline crunch | Google Colab Pro A100 | $10/mo |
-
-**Total estimated compute budget: $0–$30**
+**Total compute cost: $0** (all development on Colab free tier)
 
 ---
 
@@ -534,11 +700,12 @@ This project does **not** require expensive GPU cloud services.
 | Item | Detail |
 |------|--------|
 | Competition | [The Gemma 4 Good Hackathon](https://kaggle.com/competitions/gemma-4-good-hackathon) |
-| Organizers | Google DeepMind × Kaggle |
-| Track | Global Resilience — Climate & Green Energy |
+| Organizers | Google DeepMind x Kaggle |
+| Track | Global Resilience |
 | Special Tech | Ollama + Unsloth |
 | Deadline | May 18, 2026 at 11:59 PM UTC |
 | Kaggle profile | [melricko](https://kaggle.com/melricko) |
+| GitHub | [youshen-lim/the-gemma4-good-hackathon-solarhive](https://github.com/youshen-lim/the-gemma4-good-hackathon-solarhive) |
 
 ---
 
@@ -548,4 +715,6 @@ MIT License — see [LICENSE](LICENSE)
 
 ---
 
-*Built with Gemma 4 · Ann Arbor, Michigan · April–May 2026*
+*Built with Gemma 4 in Ann Arbor, Michigan — April 2026*
+
+*Gemma is a trademark of Google LLC.*
