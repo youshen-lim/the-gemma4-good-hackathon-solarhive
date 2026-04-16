@@ -17,7 +17,7 @@ Features:
   3. VQA panel inspection
   4. Full agentic loop: Define → Model Decides → Execute → Respond
 
-SETUP: Google Colab with A100 40GB+ GPU recommended
+SETUP: Google Colab Pro with GPU (RTX PRO 6000 Blackwell 96GB recommended)
 
 Gemma is a trademark of Google LLC.
 PRIZE TARGETS: Main Track, Global Resilience, Ollama
@@ -25,7 +25,7 @@ PRIZE TARGETS: Main Track, Global Resilience, Ollama
 ## 0: Dependencies (RUN FIRST, THEN RESTART RUNTIME IF WARNED)
 """
 
-# Colab: A100 40GB+ recommended (BF16 needs 80GB; 4-bit NF4 fits on 40GB)
+# Colab Pro: RTX PRO 6000 Blackwell 96GB (BF16). Auto-detects VRAM for NF4 fallback.
 import subprocess as _sp, sys as _sys
 
 _sp.check_call([
@@ -71,7 +71,7 @@ from datetime import datetime, timezone, timedelta
 from zoneinfo import ZoneInfo
 from PIL import Image
 
-assert torch.cuda.is_available(), "Enable GPU: Runtime → Change runtime type → A100"
+assert torch.cuda.is_available(), "Enable GPU: Runtime → Change runtime type → GPU"
 
 # GPU diagnostic
 _p = torch.cuda.get_device_properties(0)

@@ -4,7 +4,8 @@ SolarHive — Unsloth Fine-Tuning Notebook
 PURPOSE: Fine-tune Gemma 4 E4B into a solar energy domain expert using
 Unsloth QLoRA, then export to GGUF for Ollama deployment.
 
-SETUP: Google Colab with A100 40GB+ GPU recommended (BF16 on ≥55GB, 4-bit on <55GB)
+SETUP: Google Colab Pro (developed on G4 VM — RTX PRO 6000 Blackwell 96GB).
+       Also runs on A100-40GB (NF4) or A100-80GB / H100 (BF16).
 PRIZE TARGET: Unsloth Special Technology Track
 
 Gemma is a trademark of Google LLC.
@@ -74,7 +75,7 @@ print("✓ Cell 0 complete — fine-tuning stack installed. Proceed to Cell 1.")
 
 # === CELL 1: Verify GPU + transformers version ==============================
 import torch
-assert torch.cuda.is_available(), "Enable GPU: Runtime → Change runtime type → A100 GPU"
+assert torch.cuda.is_available(), "Enable GPU: Runtime → Change runtime type → GPU"
 print(f"GPU: {torch.cuda.get_device_name(0)} ({torch.cuda.get_device_properties(0).total_memory/1e9:.0f}GB)")
 
 # Hard precondition check — Gemma 4 requires transformers >= 5.5.0 (released
@@ -2702,9 +2703,9 @@ from trl import SFTTrainer, SFTConfig
 # Vision models use more VRAM per sample due to image token overhead — use smaller batches
 _train_vram_gb = torch.cuda.mem_get_info(0)[0] / 1e9
 if _train_vram_gb >= 55:
-    _batch_size, _grad_accum = 4, 4   # A100-80GB / H100: effective 16
+    _batch_size, _grad_accum = 4, 4   # ≥55GB VRAM (BF16): effective 16
 elif _train_vram_gb >= 30:
-    _batch_size, _grad_accum = 2, 8   # A100-40GB: effective 16
+    _batch_size, _grad_accum = 2, 8   # 30-55GB VRAM (NF4): effective 16
 else:
     _batch_size, _grad_accum = 1, 8   # T4 / L4: effective 8
 print(f"Training: batch_size={_batch_size}, grad_accum={_grad_accum} "
@@ -2891,7 +2892,7 @@ print("=" * 70)
 # Competition rules: "If training a model, publish your weights and benchmarks."
 # HF_TOKEN loaded in Cell 1 from Kaggle Secrets or Colab userdata.
 # Set HF_REPO to your HuggingFace username/repo before running.
-HF_REPO = "Truthseeker87/solarhive-e4b-gguf"
+HF_REPO = "Truthseeker87/solarhive-e4b-ollama"
 
 # Save LoRA adapters locally
 model.save_pretrained("solarhive_lora")
@@ -2982,7 +2983,7 @@ Option D: Same training data, second model. The fine-tuned 26B A4B powers
 the live inference demo with SolarHive domain expertise.
 
 Run AFTER Part A (E4B) completes. The E4B model is released from GPU memory
-before loading 26B A4B. Both fit on A100-40GB sequentially (not concurrently).
+before loading 26B A4B. Both fit on a single GPU sequentially (not concurrently).
 """
 
 """## 8: Release E4B + Load 26B A4B"""
@@ -2990,7 +2991,9 @@ before loading 26B A4B. Both fit on A100-40GB sequentially (not concurrently).
 # === CELL 8: Release E4B + Load 26B A4B ======================================
 # Free GPU memory from E4B fine-tuning before loading the larger 26B A4B model.
 import gc
-del model, trainer
+for _var in ("model", "trainer"):
+    if _var in dir():
+        del globals()[_var]
 gc.collect()
 torch.cuda.empty_cache()
 print(f"GPU memory freed: {torch.cuda.mem_get_info(0)[0] / 1e9:.1f} GB available")
@@ -3016,7 +3019,7 @@ else:
         _shutil.copytree(_cache_src, "/content/drive/MyDrive/models/gemma-4", dirs_exist_ok=True)
         print("✅ Cached to Drive")
 
-# VRAM auto-detect: 26B A4B needs 4-bit on A100-40GB, BF16 only on ≥55GB
+# VRAM auto-detect: 26B A4B needs 4-bit on <55GB VRAM, BF16 on ≥55GB
 _free_vram_gb = torch.cuda.mem_get_info(0)[0] / 1e9
 _a4b_use_4bit = _free_vram_gb < 55
 
@@ -3058,7 +3061,7 @@ print(f"26B A4B — Trainable: {a4b_trainable:,} / {a4b_total:,} ({100*a4b_train
 
 # === CELL 10: Train 26B A4B ===================================================
 # Same training data (DATA) and dataset, different batch size for larger model.
-# 26B A4B QLoRA uses ~25-31GB on A100-40GB — smaller batches needed.
+# 26B A4B QLoRA uses ~25-31GB — smaller batches needed on tight VRAM.
 
 # Rebuild dataset with 26B A4B tokenizer — supports both Q&A and tool-calling formats
 def _a4b_to_chat(example):
@@ -3098,9 +3101,9 @@ except Exception as e:
 # Batch size: 26B A4B needs smaller batches than E4B (vision overhead)
 _a4b_vram = torch.cuda.mem_get_info(0)[0] / 1e9
 if _a4b_vram >= 55:
-    _a4b_batch, _a4b_accum = 2, 8   # A100-80GB: effective 16
+    _a4b_batch, _a4b_accum = 2, 8   # ≥55GB VRAM (BF16): effective 16
 elif _a4b_vram >= 25:
-    _a4b_batch, _a4b_accum = 1, 8   # A100-40GB: effective 8 (tight VRAM)
+    _a4b_batch, _a4b_accum = 1, 8   # <55GB VRAM (NF4): effective 8 (tight)
 else:
     _a4b_batch, _a4b_accum = 1, 4   # Fallback
 print(f"26B A4B training: batch={_a4b_batch}, accum={_a4b_accum} "
@@ -3199,13 +3202,15 @@ for q, expected, called, raw in a4b_tc_results:
         passed = len(called) == 0
         expect_str = "no tool call"
     else:
-        passed = expected in called
-        expect_str = f"call:{expected}"
+        passed = bool(set(called) & expected)
+        expect_str = " or ".join(f"call:{t}" for t in sorted(expected))
     _a4b_tc_correct += int(passed)
     status = "✅" if passed else "❌"
     print(f"\n{status} Q: {q}")
     print(f"   Expected: {expect_str}")
     print(f"   Got:      {called if called else 'direct answer'}")
+    if not passed:
+        print(f"   Raw:      {raw[:200]}")
 
 print(f"\n26B A4B tool-calling accuracy: {_a4b_tc_correct}/{len(TOOL_BENCHMARK_QS)}")
 print("\n" + "=" * 70)

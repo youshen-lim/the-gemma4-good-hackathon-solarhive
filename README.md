@@ -309,8 +309,8 @@ Unsloth QLoRA, targeting both cloud and edge deployment:
 
 | Model | Role | Training | Export |
 |-------|------|----------|--------|
-| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | QLoRA r=16, 4,266s | LoRA adapters |
-| Gemma 4 E4B (8B) | Edge deployment via Ollama | QLoRA r=16, 257s | LoRA → Ollama |
+| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | QLoRA r=16, 4,393s | LoRA adapters |
+| Gemma 4 E4B (8B) | Edge deployment via Ollama | QLoRA r=16, 282s | LoRA → Ollama |
 
 **Training data:** 929 Q&A across 9 energy domains + 100 tool-calling
 examples (50 with tool invocations, 50 without — teaching the model
@@ -334,8 +334,8 @@ by free GPU VRAM at runtime.
 
 | Model | Converged Loss | Trainable Params | Benchmark Q&A | Benchmark Tool-Calling | Time |
 |-------|---------------|-----------------|---------------|----------------------|------|
-| Gemma 4 26B A4B | **0.742** | 29.6M / 25.8B (0.11%) | 5/5 | 3/3 | 4,266s |
-| Gemma 4 E4B | **1.059** | 41.2M / 8.0B (0.51%) | 5/5 | 3/3 | 257s |
+| Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 5/5 | 1/3 | 4,393s |
+| Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 5/5 | 2/3 | 282s |
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama means
 community energy data never leaves the neighborhood. No cloud
@@ -352,7 +352,7 @@ Three Colab Notebooks — the complete pipeline:
 solarhive_datagen.py     Data generation: 4 live APIs → 551 training examples
         ↓                + 12 diagnostic charts
 solarhive_finetune.py    Dual QLoRA fine-tuning via Unsloth
-        ↓                E4B (257s) + 26B A4B (4,266s)
+        ↓                E4B (282s) + 26B A4B (4,393s)
 solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
                          + 3 VQA modes + agentic loop + benchmarks
 
