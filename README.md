@@ -358,7 +358,7 @@ solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
 
 Hardware: Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell
           Server Edition (96 GB GDDR7), BF16 precision
-Cost:     $0 (Colab free tier)
+Platform: Google Colab Pro
 ```
 
 **Agentic loop (Cell 4):**
@@ -686,14 +686,12 @@ community-level optimization.
 
 ## Compute Strategy
 
-| Task | Platform | GPU | Cost |
-|------|----------|-----|------|
-| Data generation | Google Colab | RTX PRO 6000 (96 GB) | $0 |
-| Fine-tuning (dual QLoRA) | Google Colab | RTX PRO 6000 (96 GB), BF16 | $0 |
-| Inference demo | Google Colab | RTX PRO 6000 (96 GB), BF16 | $0 |
-| Edge deployment | Ollama on laptop | CPU (E2B, 5.1B params) | $0 |
-
-**Total compute cost: $0** (all development on Colab free tier)
+| Task | Platform | GPU |
+|------|----------|-----|
+| Data generation | Google Colab Pro | RTX PRO 6000 (96 GB) |
+| Fine-tuning (dual QLoRA) | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
+| Inference demo | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
+| Edge deployment | Ollama on laptop | CPU (E2B, 5.1B params) |
 
 ---
 
