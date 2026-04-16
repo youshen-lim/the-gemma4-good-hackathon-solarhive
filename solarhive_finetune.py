@@ -2804,9 +2804,11 @@ BENCHMARK_QS = [
 ]
 
 # Tool-calling benchmark: held-out questions that SHOULD trigger tool calls
+# Each entry: (question, set of acceptable tools OR None for no-tool expected)
+# Uses set-based matching: any valid tool in the set counts as correct.
 TOOL_BENCHMARK_QS = [
-    ("What's the current battery state?", "get_battery_state"),
-    ("How much solar are we producing right now in Seattle?", "get_weather"),
+    ("What's the current battery state?", {"get_battery_state"}),
+    ("How much solar are we producing right now in Seattle?", {"get_solar_production", "get_weather"}),
     ("What are the general maintenance tips for panels?", None),  # should NOT call a tool
 ]
 
@@ -2868,8 +2870,8 @@ for q, expected, called, raw in tc_results:
         passed = len(called) == 0
         expect_str = "no tool call"
     else:
-        passed = expected in called
-        expect_str = f"call:{expected}"
+        passed = bool(set(called) & expected)  # any called tool in acceptable set
+        expect_str = " or ".join(f"call:{t}" for t in sorted(expected))
     _tc_correct += int(passed)
     status = "✅" if passed else "❌"
     print(f"\n{status} Q: {q}")
