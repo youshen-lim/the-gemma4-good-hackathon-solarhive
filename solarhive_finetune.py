@@ -2929,6 +2929,20 @@ for f in _gguf_files:
     _sz = _os.path.getsize(f) / 1e9
     print(f"   {f} ({_sz:.1f} GB)")
 
+# Copy GGUF/safetensors to Drive for persistence
+_drive_gguf_path = "/content/drive/MyDrive/models/solarhive_e4b_gguf"
+try:
+    import shutil as _shutil_gguf
+    _os.makedirs(_drive_gguf_path, exist_ok=True)
+    for _f in _os.listdir("solarhive_gguf"):
+        _src = f"solarhive_gguf/{_f}"
+        if _os.path.isfile(_src):
+            _shutil_gguf.copy2(_src, _drive_gguf_path)
+    print(f"✅ GGUF copied to Google Drive: {_drive_gguf_path}")
+except Exception as e:
+    print(f"⚠️  Drive copy failed (non-blocking): {e}")
+    print("   Manually copy: !cp -r solarhive_gguf /content/drive/MyDrive/models/solarhive_e4b_gguf")
+
 # Push to HuggingFace (required for competition: "publish your weights")
 # Safe to skip on first run — set HF_REPO and add HF_TOKEN to Colab Secrets when ready.
 try:
