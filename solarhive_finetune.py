@@ -2886,9 +2886,9 @@ print("\n" + "=" * 70)
 print("✅ Benchmark complete — copy above for Kaggle writeup")
 print("=" * 70)
 
-"""## 7: Export to GGUF + Push to HuggingFace"""
+"""## 7: Export for Ollama + Push to HuggingFace"""
 
-# === CELL 7: Export to GGUF + Push to HuggingFace =============================
+# === CELL 7: Export for Ollama + Push to HuggingFace ==========================
 # Competition rules: "If training a model, publish your weights and benchmarks."
 # HF_TOKEN loaded in Cell 1 from Kaggle Secrets or Colab userdata.
 # Set HF_REPO to your HuggingFace username/repo before running.
@@ -2909,10 +2909,9 @@ except Exception as e:
     print(f"⚠️  Drive copy failed (non-blocking): {e}")
     print("   Manually copy: !cp -r solarhive_lora /content/drive/MyDrive/models/")
 
-# Export to GGUF (q4_k_m quantization for Ollama)
-# Unsloth handles Gemma 4 VLM export: produces model GGUF + mmproj GGUF (vision projector).
-# Requires Unsloth's patched llama.cpp — ensure Cell 0 installs latest unsloth.
-# If GGUF export fails, LoRA adapters are already saved above as fallback.
+# Export for Ollama: try GGUF first, fall back to merged 16-bit safetensors.
+# Ollama imports safetensors directly — no GGUF conversion needed.
+# GGUF export may fail on Gemma 4 VLM (mmproj issue); safetensors fallback is reliable.
 import os as _os
 try:
     model.save_pretrained_gguf("solarhive_gguf", tokenizer, quantization_method="q4_k_m")
@@ -2930,8 +2929,8 @@ for f in _gguf_files:
     _sz = _os.path.getsize(f) / 1e9
     print(f"   {f} ({_sz:.1f} GB)")
 
-# Copy GGUF/safetensors to Drive for persistence
-_drive_gguf_path = "/content/drive/MyDrive/models/solarhive_e4b_gguf"
+# Copy exported model to Drive for persistence
+_drive_gguf_path = "/content/drive/MyDrive/models/solarhive_e4b_ollama"
 try:
     import shutil as _shutil_gguf
     _os.makedirs(_drive_gguf_path, exist_ok=True)
@@ -2939,10 +2938,10 @@ try:
         _src = f"solarhive_gguf/{_f}"
         if _os.path.isfile(_src):
             _shutil_gguf.copy2(_src, _drive_gguf_path)
-    print(f"✅ GGUF copied to Google Drive: {_drive_gguf_path}")
+    print(f"✅ Model copied to Google Drive: {_drive_gguf_path}")
 except Exception as e:
     print(f"⚠️  Drive copy failed (non-blocking): {e}")
-    print("   Manually copy: !cp -r solarhive_gguf /content/drive/MyDrive/models/solarhive_e4b_gguf")
+    print("   Manually copy: !cp -r solarhive_gguf /content/drive/MyDrive/models/solarhive_e4b_ollama")
 
 # Push to HuggingFace (required for competition: "publish your weights")
 # Safe to skip on first run — set HF_REPO and add HF_TOKEN to Colab Secrets when ready.
@@ -2968,12 +2967,14 @@ print(f"""
 ✅ Export complete! {'HF push: pending — update HF_REPO' if HF_REPO.startswith('YOUR_USERNAME') else f'HF: https://huggingface.co/{HF_REPO}'}
 
 Ollama deployment:
-  1. Copy solarhive_gguf/*.gguf to your machine
+  1. Copy solarhive_gguf/ folder to your machine
   2. Create Modelfile:
-       FROM ./solarhive-gemma4-e4b-q4_k_m.gguf
+       FROM ./solarhive_gguf
        SYSTEM "You are SolarHive, an AI energy advisor for a community solar microgrid."
   3. ollama create solarhive -f Modelfile
   4. ollama run solarhive
+
+Note: Ollama imports safetensors directly — no GGUF conversion needed.
 """)
 
 
@@ -3247,9 +3248,9 @@ To use in inference.py, load the base 26B A4B model then apply LoRA:
   model = PeftModel.from_pretrained(model, "solarhive_a4b_lora")
 """)
 
-"""## 13: GGUF Conversion + Ollama Deployment"""
+"""## 13: Ollama Deployment"""
 
-# === CELL 13: GGUF Conversion + Ollama Deployment =============================
+# === CELL 13: Ollama Deployment ===============================================
 # Unsloth's save_pretrained_gguf may fail on Gemma 4 VLM models because its
 # llama.cpp tries to convert the vision projector (--mmproj). Cell 7's fallback
 # saves a merged 16-bit HF model (safetensors) instead.
@@ -3263,7 +3264,7 @@ To use in inference.py, load the base 26B A4B model then apply LoRA:
 import os as _os, glob as _glob, subprocess, shutil
 
 _gguf_dir = "solarhive_gguf"
-_drive_gguf = "/content/drive/MyDrive/models/solarhive_e4b_gguf"
+_drive_gguf = "/content/drive/MyDrive/models/solarhive_e4b_ollama"
 
 # Check if GGUF already exists from Cell 7
 _existing_gguf = _glob.glob(f"{_gguf_dir}/*.gguf")
