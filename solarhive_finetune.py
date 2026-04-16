@@ -2755,15 +2755,16 @@ FastVisionModel.for_inference(model)
 print("─" * 60)
 print("TEST 1: General knowledge (expect direct answer)")
 print("─" * 60)
-inputs = processor.apply_chat_template(
+_t1_text = processor.apply_chat_template(
     [{"role": "system", "content": SYS_TOOLS},
      {"role": "user", "content": "It's snowing and panels are covered. What now?"}],
-    tokenize=True, add_generation_prompt=True, enable_thinking=False, return_tensors="pt",
-).to(model.device)
+    tokenize=False, add_generation_prompt=True, enable_thinking=False,
+)
+_t1_inputs = processor(text=_t1_text, return_tensors="pt").to(model.device)
 
-out = model.generate(input_ids=inputs, max_new_tokens=300,
+out = model.generate(**_t1_inputs, max_new_tokens=300,
                      temperature=1.0, top_k=64, top_p=0.95)
-print(processor.tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True))
+print(processor.tokenizer.decode(out[0][_t1_inputs["input_ids"].shape[1]:], skip_special_tokens=True))
 
 # Test 2: Real-time question (should emit tool call)
 print("\n" + "─" * 60)
@@ -2813,15 +2814,15 @@ def _run_benchmark(model, processor, label):
     """Generate answers for all benchmark questions."""
     results = []
     for q in BENCHMARK_QS:
-        inputs = processor.apply_chat_template(
+        text = processor.apply_chat_template(
             [{"role": "system", "content": SYS},
              {"role": "user", "content": q}],
-            tokenize=True, add_generation_prompt=True, enable_thinking=False,
-            return_tensors="pt",
-        ).to(model.device)
-        out = model.generate(input_ids=inputs, max_new_tokens=300,
+            tokenize=False, add_generation_prompt=True, enable_thinking=False,
+        )
+        inputs = processor(text=text, return_tensors="pt").to(model.device)
+        out = model.generate(**inputs, max_new_tokens=300,
                              temperature=1.0, top_k=64, top_p=0.95)
-        answer = processor.tokenizer.decode(out[0][inputs.shape[1]:], skip_special_tokens=True)
+        answer = processor.tokenizer.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=True)
         results.append(answer)
     return results
 
@@ -3129,15 +3130,16 @@ FastVisionModel.for_inference(a4b_model)
 print("─" * 60)
 print("26B A4B TEST 1: General knowledge")
 print("─" * 60)
-_a4b_inputs = a4b_processor.apply_chat_template(
+_a4b_t1_text = a4b_processor.apply_chat_template(
     [{"role": "system", "content": SYS_TOOLS},
      {"role": "user", "content": "It's snowing and panels are covered. What now?"}],
-    tokenize=True, add_generation_prompt=True, enable_thinking=False, return_tensors="pt",
-).to(a4b_model.device)
+    tokenize=False, add_generation_prompt=True, enable_thinking=False,
+)
+_a4b_inputs = a4b_processor(text=_a4b_t1_text, return_tensors="pt").to(a4b_model.device)
 
-_a4b_out = a4b_model.generate(input_ids=_a4b_inputs, max_new_tokens=300,
+_a4b_out = a4b_model.generate(**_a4b_inputs, max_new_tokens=300,
                                temperature=1.0, top_k=64, top_p=0.95)
-print(a4b_processor.tokenizer.decode(_a4b_out[0][_a4b_inputs.shape[1]:], skip_special_tokens=True))
+print(a4b_processor.tokenizer.decode(_a4b_out[0][_a4b_inputs["input_ids"].shape[1]:], skip_special_tokens=True))
 
 # Test 2: Tool call
 print("\n" + "─" * 60)
