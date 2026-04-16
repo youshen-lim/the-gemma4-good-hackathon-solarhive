@@ -3242,7 +3242,7 @@ To use in inference.py, load the base 26B A4B model then apply LoRA:
 import os as _os, glob as _glob, subprocess, shutil
 
 _gguf_dir = "solarhive_gguf"
-_drive_gguf = "/content/drive/MyDrive/models/solarhive_gguf"
+_drive_gguf = "/content/drive/MyDrive/models/solarhive_e4b_gguf"
 
 # Check if GGUF already exists from Cell 7
 _existing_gguf = _glob.glob(f"{_gguf_dir}/*.gguf")
