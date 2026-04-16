@@ -2960,14 +2960,14 @@ Ollama deployment:
 """)
 
 
-# =============================================================================
-# PART B: Fine-Tune 26B A4B (Cloud Inference Model)
-# =============================================================================
-# Option D: Same training data, second model. The fine-tuned 26B A4B powers
-# the live inference demo with SolarHive domain expertise.
-#
-# Run AFTER Part A (E4B) completes. The E4B model is released from GPU memory
-# before loading 26B A4B. Both fit on A100-40GB sequentially (not concurrently).
+"""## Part B: Fine-Tune 26B A4B (Cloud Inference Model)
+
+Option D: Same training data, second model. The fine-tuned 26B A4B powers
+the live inference demo with SolarHive domain expertise.
+
+Run AFTER Part A (E4B) completes. The E4B model is released from GPU memory
+before loading 26B A4B. Both fit on A100-40GB sequentially (not concurrently).
+"""
 
 """## 8: Release E4B + Load 26B A4B"""
 
