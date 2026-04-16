@@ -2889,7 +2889,7 @@ print("=" * 70)
 # Competition rules: "If training a model, publish your weights and benchmarks."
 # HF_TOKEN loaded in Cell 1 from Kaggle Secrets or Colab userdata.
 # Set HF_REPO to your HuggingFace username/repo before running.
-HF_REPO = "YOUR_USERNAME/solarhive-gemma-4-e4b"  # ← UPDATE with your HF username
+HF_REPO = "Truthseeker87/solarhive-e4b-gguf"
 
 # Save LoRA adapters locally
 model.save_pretrained("solarhive_lora")
