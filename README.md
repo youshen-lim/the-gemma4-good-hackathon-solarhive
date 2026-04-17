@@ -9,6 +9,7 @@
 
 [![Kaggle](https://img.shields.io/badge/Kaggle-Gemma%204%20Good%20Hackathon-20BEFF?logo=kaggle)](https://kaggle.com/competitions/gemma-4-good-hackathon)
 [![Model](https://img.shields.io/badge/Gemma%204-26B%20A4B-4285F4?logo=google)](https://kaggle.com/models/google/gemma-4)
+[![Demo](https://img.shields.io/badge/HF%20Space-Live%20Demo-FFD21E?logo=huggingface)](https://huggingface.co/spaces/Truthseeker87/solarhive)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20Inference-black?logo=ollama)](https://ollama.com/library/gemma4)
 [![Unsloth](https://img.shields.io/badge/Unsloth-Fine--Tuned-FF6B35)](https://unsloth.ai)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
@@ -692,6 +693,18 @@ community-level optimization.
 | Fine-tuning (dual QLoRA) | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
 | Inference demo | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
 | Edge deployment | Ollama on laptop | CPU (E2B, 5.1B params) |
+
+---
+
+## Models & Resources
+
+| Resource | Link | Purpose |
+|----------|------|---------|
+| **Live Demo** | [HF Space](https://huggingface.co/spaces/Truthseeker87/solarhive) | Interactive Gradio demo (ZeroGPU) |
+| **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Production inference — no Unsloth needed |
+| **26B A4B LoRA** | [solarhive-26b-a4b-lora](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) | LoRA adapters for further fine-tuning |
+| **E4B Ollama** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge deployment via Ollama |
+| **Dataset** | [solarhive-community-solar-1k](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-1k) | 1,029 training examples |
 
 ---
 
