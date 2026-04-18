@@ -309,6 +309,80 @@ result = solarhive_agent(
 
 ### Feature 3 — Dual Fine-Tuned Domain Expert (Unsloth + Ollama)
 
+**Why these models?** Gemma 4 offers four model sizes. We evaluated all
+four and selected two complementary architectures for a dual fine-tune
+strategy — one for cloud inference, one for edge deployment:
+
+| Model | Params (Total / Active) | Architecture | Vision Encoder | Context | Modalities | Selection |
+|-------|------------------------|--------------|---------------|---------|------------|-----------|
+| E2B | 5.1B / 2.3B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio, Video | **Ollama serving target** — lightest, runs on laptop CPU, 34 quantized variants |
+| E4B | 8B / 4.5B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio, Video | **Fine-tuned for edge** — Any-to-Any multimodal, fits T4 in 4-bit (~12 GB) |
+| 26B A4B | 25.2B / 3.8B active | MoE (8/128) | ~550M | 256K | Text, Image | **Fine-tuned for cloud** — best domain absorption (0.675 loss), 256K context |
+| 31B | 30.7B / 30.7B | Dense | ~550M | 256K | Text, Image | **Rejected** — only 2–3% better than 26B A4B, 2–4x slower, tighter GPU fit |
+
+*Source: [Gemma 4 Model Card](https://ai.google.dev/gemma/docs/core/model_card_4). All four models support native function calling and agentic workflows.*
+
+**Benchmark backing — why 26B A4B is the sweet spot:**
+
+SolarHive requires two core capabilities: **multimodal VQA** (analyzing
+sky photos and panel images to assess solar conditions) and **native
+function calling** (autonomously invoking weather, solar, battery, and
+grid APIs in agentic loops). The official benchmarks show why 26B A4B
+delivers the best capability-to-cost ratio for these use cases:
+
+| Benchmark | SolarHive Use Case | E2B | E4B | **26B A4B** | 31B |
+|-----------|-------------------|-----|-----|-------------|-----|
+| MMMU Pro (vision) | Sky/panel VQA analysis | 44.2% | 52.6% | **73.8%** | 76.9% |
+| MATH-Vision | Visual reasoning on solar data | 52.4% | 59.5% | **82.4%** | 85.6% |
+| OmniDocBench (↓better) | Document understanding | 0.290 | 0.181 | **0.149** | 0.131 |
+| MMLU Pro | Domain expertise (energy advisory) | 60.0% | 69.4% | **82.6%** | 85.2% |
+| GPQA Diamond | Scientific reasoning | 43.4% | 58.6% | **82.3%** | 84.3% |
+| MRCR v2 128K | Multi-round tool-calling context | 19.1% | 25.4% | **44.1%** | 66.4% |
+| CoVoST (audio) | Future voice interaction | 33.47 | 35.54 | — | — |
+
+The pattern is clear: **26B A4B captures ~95% of 31B's quality** on
+vision (MMMU Pro 73.8% vs 76.9%) and reasoning (MMLU Pro 82.6% vs
+85.2%), while being significantly more efficient via MoE sparse
+activation. Meanwhile, E4B/E2B retain audio capabilities that 26B A4B
+and 31B lack entirely — making them the right choice for edge
+deployment with future voice interaction.
+
+**Key architectural decisions:**
+
+- **26B A4B for cloud inference (VQA + function calling):** The larger
+  ~550M vision encoder delivers superior sky condition analysis and
+  panel health inspection — critical for SolarHive's three VQA modes
+  (MMMU Pro 73.8% vs E4B's 52.6%). MoE sparse activation (only 3.8B
+  of 25.2B params active per forward pass) achieves near-31B quality
+  at a fraction of the compute. 256K context window accommodates
+  multi-round agentic tool-calling loops where the model chains 4 API
+  calls per turn. Absorbs domain knowledge most effectively (converged
+  loss 0.675 vs E4B's 0.952). Fits A100-40GB in NF4 (~16 GB) or runs
+  BF16 on 96 GB GPUs.
+
+- **E4B for fine-tuning (edge path):** Compact dense model with
+  Per-Layer Embeddings (PLE) for memory efficiency. Supports
+  image + audio + text (Any-to-Any) — enabling future voice interaction
+  for community members querying energy status from mobile devices
+  (CoVoST 35.54 — unavailable on 26B A4B/31B). All Gemma 4 models
+  share the same native function-calling protocol, so E4B retains full
+  tool-use capability at the edge. Trains in just 282s on RTX PRO 6000.
+  LoRA adapters export to GGUF for Ollama.
+
+- **E2B for Ollama serving (not E4B):** At 2.3B effective parameters,
+  E2B runs on laptop CPU without a GPU — the strongest local-first,
+  privacy-first narrative. Community energy data never leaves the
+  neighborhood. Retains VQA, function-calling, and audio capabilities
+  (CoVoST 33.47) for basic sky assessment and tool invocation at the
+  edge.
+
+- **31B rejected:** The fully dense 30.7B model scores only 2–3% higher
+  than 26B A4B on vision (MMMU Pro 76.9% vs 73.8%) and reasoning (MMLU
+  Pro 85.2% vs 82.6%) but requires 2–4x more compute and VRAM. The
+  shared ~550M vision encoder means VQA quality is comparable — the
+  marginal gain does not justify the cost for a community energy
+  advisor.
+
 Two models fine-tuned on 1,029 community solar energy examples using
 Unsloth LoRA, targeting both cloud and edge deployment:
 
