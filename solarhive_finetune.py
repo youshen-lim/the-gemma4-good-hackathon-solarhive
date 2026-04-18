@@ -1,6 +1,12 @@
 """
 SolarHive — Unsloth Fine-Tuning Notebook
 ==========================================
+SolarHive is an open-source intelligence layer designed to coordinate
+community microgrids & community-based storage via fuel cells, pool
+midday energy surplus across these microgrids, and eliminate stranded
+capacity. It also helps forecast solar irradiance and cloud cover to
+plan ahead.
+
 PURPOSE: Fine-tune Gemma 4 E4B into a solar energy domain expert using
 Unsloth LoRA (QLoRA when VRAM <55 GB), then export to GGUF for Ollama deployment.
 

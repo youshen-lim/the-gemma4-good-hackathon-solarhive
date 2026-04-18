@@ -29,7 +29,11 @@
 > *Energy can be distributed across communities based on energy needs
 > in a decentralized live or hybrid grid — as opposed to a dead grid.*
 
-**SolarHive is the AI intelligence layer that makes this dream actionable.**
+**SolarHive is an open-source intelligence layer designed to coordinate
+community microgrids & community-based storage via fuel cells, pool
+midday energy surplus across these microgrids, and eliminate stranded
+capacity. It also helps forecast solar irradiance and cloud cover to
+plan ahead.**
 
 Powered by Gemma 4, it transforms fragmented household-level solar data
 into a unified, conversational, visual community energy picture —
@@ -657,8 +661,8 @@ provides verifiable energy resilience data.
 
 ## What SolarHive Does NOT Solve
 
-SolarHive is an intelligence and optimization layer. It is important
-to be clear about what it does not do:
+SolarHive is an open-source intelligence and optimization layer. It is
+important to be clear about what it does not do:
 
 - **Does not change the fundamental physics of solar cell efficiency.**
   The Shockley–Queisser theoretical limit of ~33% for single-junction

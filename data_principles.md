@@ -85,7 +85,7 @@ for domain-specific adaptation:
   larger sets, but QLoRA's rank-16 bottleneck limits absorptive capacity.
 
 SolarHive targets **~1,029 total examples** (929 Q&A + 100 tool-calling),
-placing it squarely in the productive range for QLoRA r=16 on instruction-tuned
+placing it squarely in the productive range for LoRA r=16 on instruction-tuned
 Gemma 4.
 
 ### 6.2 Combined Training Data Stack
@@ -178,7 +178,7 @@ well.
 
 Dual fine-tune on Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell Server Edition (96 GB GDDR7, ~95 GB usable), Unsloth 2026.4.4,
 transformers 5.5.0. Both models trained on the same 1,029 examples (929 Q&A +
-100 tool-calling) for 3 epochs with QLoRA.
+100 tool-calling) for 3 epochs with LoRA (BF16).
 
 ### 7.1 Shared Hyperparameters
 
