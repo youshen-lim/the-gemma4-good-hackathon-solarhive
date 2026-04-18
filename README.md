@@ -321,7 +321,7 @@ when NOT to call tools). Two complementary sources:
   sky conditions, battery management, panel health, consumption
   optimization, community/grid strategy, emergency resilience, seasonal
   planning, multi-step reasoning, and alternative storage
-- **501 API-grounded examples** generated from live Open-Meteo, PVWatts,
+- **516 API-grounded examples** generated from live Open-Meteo, PVWatts,
   OpenWeatherMap, and EIA data for Ann Arbor, MI and San Mateo, CA —
   including hourly production scenarios, PVWatts cross-validation,
   grid mix analysis, weather impact, and battery/grid strategy
@@ -333,10 +333,12 @@ by free GPU VRAM at runtime.
 
 **Training results (Google Colab G4 VM, RTX PRO 6000, BF16):**
 
-| Model | Converged Loss | Trainable Params | Benchmark Q&A | Benchmark Tool-Calling | Time |
-|-------|---------------|-----------------|---------------|----------------------|------|
-| Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 5/5 | 1/3 | 4,393s |
-| Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 5/5 | 2/3 | 282s |
+| Model | Converged Loss | Trainable Params | Isolated Benchmark | Production Benchmark (agentic) | Time |
+|-------|---------------|-----------------|-------------------|-------------------------------|------|
+| Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 6/8 (5/5 Q&A, 1/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 4,393s |
+| Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 7/8 (5/5 Q&A, 2/3 tool) | — | 282s |
+
+*Isolated benchmarks run without tool schemas. Production benchmarks run in the full agentic loop with tool definitions passed via `apply_chat_template(tools=[...])`. The 26B A4B reliably calls tools when given the function signatures it was trained on.*
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama means
 community energy data never leaves the neighborhood. No cloud
