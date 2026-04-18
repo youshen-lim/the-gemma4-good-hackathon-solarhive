@@ -2,7 +2,7 @@
 SolarHive — Unsloth Fine-Tuning Notebook
 ==========================================
 PURPOSE: Fine-tune Gemma 4 E4B into a solar energy domain expert using
-Unsloth QLoRA, then export to GGUF for Ollama deployment.
+Unsloth LoRA (QLoRA when VRAM <55 GB), then export to GGUF for Ollama deployment.
 
 SETUP: Google Colab Pro (developed on G4 VM — RTX PRO 6000 Blackwell 96GB).
        Also runs on A100-40GB (NF4) or A100-80GB / H100 (BF16).
@@ -37,8 +37,8 @@ Based on: https://unsloth.ai/docs/basics/vision-fine-tuning
 #      5.0.0 (Jan 2026) which has NO `gemma4` and a broken `AutoProcessor`
 #      import (`retry` missing from transformers.utils.generic, HF #42352).
 #   2. `accelerate` — required by `device_map="auto"` in Cell 2.
-#   3. `bitsandbytes` — 4-bit QLoRA loading of Gemma 4 E4B.
-#   4. `unsloth` — Gemma 4 fine-tuning framework (QLoRA, ~30% VRAM savings).
+#   3. `bitsandbytes` — 4-bit quantization (QLoRA fallback on <55 GB VRAM).
+#   4. `unsloth` — Gemma 4 fine-tuning framework (LoRA/QLoRA, ~30% VRAM savings).
 #   5. `trl` — SFT trainer used by Unsloth.
 #   6. `datasets` — HF dataset loader for the training examples.
 #
@@ -3062,7 +3062,7 @@ print(f"26B A4B — Trainable: {a4b_trainable:,} / {a4b_total:,} ({100*a4b_train
 
 # === CELL 10: Train 26B A4B ===================================================
 # Same training data (DATA) and dataset, different batch size for larger model.
-# 26B A4B QLoRA uses ~25-31GB — smaller batches needed on tight VRAM.
+# 26B A4B VRAM: ~25-31 GB (NF4) or ~56 GB (BF16) — smaller batches needed on tight VRAM.
 
 # Rebuild dataset with 26B A4B tokenizer — supports both Q&A and tool-calling formats
 def _a4b_to_chat(example):
@@ -3247,6 +3247,132 @@ To use in inference.py, load the base 26B A4B model then apply LoRA:
   from peft import PeftModel
   model = PeftModel.from_pretrained(model, "solarhive_a4b_lora")
 """)
+
+"""## 12b: Merge & Push 26B A4B to HuggingFace (for HF Space)"""
+
+# === CELL 12b: Merge & Push 26B A4B to HuggingFace ============================
+# Self-contained cell: installs deps, mounts Drive, loads base model + LoRA,
+# merges, and pushes. Can run standalone on a fresh runtime (Cell 0 not needed).
+#
+# Prerequisites:
+#   - Google Drive has:
+#       /models/gemma-4/transformers/gemma-4-26b-a4b-it/1  (base model)
+#       /models/solarhive_a4b_lora                          (LoRA adapters)
+#   - HF_TOKEN set in Colab secrets with write access
+#   - GPU with ~50 GB free VRAM (BF16 merge) or ~20 GB (4-bit load + merge)
+#   - ~100 GB free disk (base model + merged output)
+#
+# Output: Truthseeker87/solarhive-26b-a4b on HuggingFace
+
+# ── 0. Install dependencies (if not already present) ──────────────────────
+import subprocess as _sp, sys as _sys
+_sp.check_call([
+    _sys.executable, "-m", "pip", "install", "-q",
+    "transformers>=5.5.0", "accelerate", "bitsandbytes",
+    "unsloth>=2025.4.7", "huggingface_hub",
+])
+
+import os, json, shutil, torch
+
+# ── 1. Mount Google Drive ──────────────────────────────────────────────────
+try:
+    from google.colab import drive
+    drive.mount("/content/drive")
+    print("✅ Google Drive mounted")
+except ImportError:
+    print("Not running on Colab — assuming Drive already at /content/drive")
+
+# ── 2. Locate base model + LoRA on Drive ───────────────────────────────────
+_DRIVE_BASE = "/content/drive/MyDrive/models/gemma-4/transformers/gemma-4-26b-a4b-it/1"
+_DRIVE_LORA = "/content/drive/MyDrive/models/solarhive_a4b_lora"
+
+_a4b_lora_path = "solarhive_a4b_lora"
+_a4b_merged_path = "solarhive_a4b_merged"
+HF_REPO_A4B = "Truthseeker87/solarhive-26b-a4b"
+
+# Verify Drive paths exist
+assert os.path.isdir(_DRIVE_BASE), (
+    f"Base model not found at {_DRIVE_BASE}\n"
+    "  Copy from kagglehub cache:\n"
+    "  !cp -r /root/.cache/kagglehub/models/google/gemma-4 /content/drive/MyDrive/models/"
+)
+print(f"✅ Base model found: {_DRIVE_BASE}")
+
+assert os.path.isdir(_DRIVE_LORA), (
+    f"LoRA adapters not found at {_DRIVE_LORA}\n"
+    "  Run Cell 12 first to save adapters, or copy manually."
+)
+print(f"✅ LoRA adapters found: {_DRIVE_LORA}")
+
+# ── 3. Copy LoRA to local disk + patch adapter_config ──────────────────────
+# Unsloth reads adapter_config.json.base_model_name_or_path to find the base
+# model. The saved config points to the original training path (kagglehub cache)
+# which doesn't exist on a fresh runtime. Patch it to point to Drive.
+if os.path.exists(_a4b_lora_path):
+    shutil.rmtree(_a4b_lora_path)
+shutil.copytree(_DRIVE_LORA, _a4b_lora_path)
+print(f"Copied LoRA to local: {_a4b_lora_path}")
+
+_adapter_cfg_path = os.path.join(_a4b_lora_path, "adapter_config.json")
+if os.path.exists(_adapter_cfg_path):
+    with open(_adapter_cfg_path, "r") as f:
+        _cfg = json.load(f)
+    _old_base = _cfg.get("base_model_name_or_path", "")
+    _cfg["base_model_name_or_path"] = _DRIVE_BASE
+    with open(_adapter_cfg_path, "w") as f:
+        json.dump(_cfg, f, indent=2)
+    print(f"Patched adapter_config: {_old_base} → {_DRIVE_BASE}")
+
+# ── 4. Load base + LoRA via Unsloth and merge ─────────────────────────────
+print(f"\nLoading 26B A4B + LoRA from {_a4b_lora_path}...")
+from unsloth import FastVisionModel
+
+_merge_model, _merge_tokenizer = FastVisionModel.from_pretrained(
+    model_name=_a4b_lora_path,
+    load_in_4bit=False,
+    dtype=torch.bfloat16,
+)
+
+print("Merging LoRA into base weights (16-bit)...")
+_merge_model.save_pretrained_merged(
+    _a4b_merged_path,
+    _merge_tokenizer,
+    save_method="merged_16bit",
+)
+print(f"✅ Merged model saved to {_a4b_merged_path}/")
+
+# ── 5. Push to HuggingFace ────────────────────────────────────────────────
+try:
+    _hf_token = None
+    try:
+        from google.colab import userdata
+        _hf_token = userdata.get("HF_TOKEN")
+    except Exception:
+        _hf_token = os.environ.get("HF_TOKEN")
+
+    if not _hf_token:
+        print("⚠️  HF_TOKEN not found — skipping upload.")
+        print(f"   Manual upload: huggingface-cli upload {HF_REPO_A4B} {_a4b_merged_path}")
+    else:
+        from huggingface_hub import HfApi
+        _api = HfApi(token=_hf_token)
+        _api.create_repo(HF_REPO_A4B, exist_ok=True, private=False)
+        print(f"Uploading to {HF_REPO_A4B} (this may take 10-20 min for ~48 GB)...")
+        _api.upload_folder(
+            folder_path=_a4b_merged_path,
+            repo_id=HF_REPO_A4B,
+            token=_hf_token,
+        )
+        print(f"✅ Pushed to https://huggingface.co/{HF_REPO_A4B}")
+except Exception as e:
+    print(f"⚠️  Upload failed (non-blocking): {e}")
+    print(f"   Manual upload: huggingface-cli upload {HF_REPO_A4B} {_a4b_merged_path}")
+
+# ── 6. Cleanup ────────────────────────────────────────────────────────────
+del _merge_model, _merge_tokenizer
+if torch.cuda.is_available():
+    torch.cuda.empty_cache()
+print("🧹 Freed merge model memory.")
 
 """## 13: Ollama Deployment"""
 
