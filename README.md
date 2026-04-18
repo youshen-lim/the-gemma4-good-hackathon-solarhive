@@ -306,12 +306,12 @@ result = solarhive_agent(
 ### Feature 3 — Dual Fine-Tuned Domain Expert (Unsloth + Ollama)
 
 Two models fine-tuned on 1,029 community solar energy examples using
-Unsloth QLoRA, targeting both cloud and edge deployment:
+Unsloth LoRA, targeting both cloud and edge deployment:
 
 | Model | Role | Training | Export |
 |-------|------|----------|--------|
-| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | QLoRA r=16, 4,393s | LoRA adapters |
-| Gemma 4 E4B (8B) | Edge deployment via Ollama | QLoRA r=16, 282s | LoRA → Ollama |
+| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | LoRA r=16, BF16, 4,393s | LoRA adapters |
+| Gemma 4 E4B (8B) | Edge deployment via Ollama | LoRA r=16, BF16, 282s | LoRA → Ollama |
 
 **Training data:** 929 Q&A across 9 energy domains + 100 tool-calling
 examples (50 with tool invocations, 50 without — teaching the model
@@ -354,7 +354,7 @@ Three Colab Notebooks — the complete pipeline:
 
 solarhive_datagen.py     Data generation: 4 live APIs → 551 training examples
         ↓                + 12 diagnostic charts
-solarhive_finetune.py    Dual QLoRA fine-tuning via Unsloth
+solarhive_finetune.py    Dual LoRA fine-tuning via Unsloth
         ↓                E4B (282s) + 26B A4B (4,393s)
 solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
                          + 3 VQA modes + agentic loop + benchmarks
@@ -482,7 +482,7 @@ the-gemma4-good-hackathon-solarhive/
 ├── solarhive_inference.py       # Gemma 4 26B A4B inference: VQA (3 modes) +
 │                                # native function calling + agentic loop + benchmarks
 ├── solarhive_inference.ipynb    # Jupyter notebook version
-├── solarhive_finetune.py        # Unsloth QLoRA dual fine-tuning:
+├── solarhive_finetune.py        # Unsloth LoRA dual fine-tuning:
 │                                # E4B + 26B A4B → LoRA adapters
 ├── solarhive_finetune.ipynb     # Jupyter notebook version
 ├── solarhive_datagen.py         # Data generation: 4 live APIs → training examples
@@ -692,7 +692,7 @@ community-level optimization.
 | Task | Platform | GPU |
 |------|----------|-----|
 | Data generation | Google Colab Pro | RTX PRO 6000 (96 GB) |
-| Fine-tuning (dual QLoRA) | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
+| Fine-tuning (dual LoRA) | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
 | Inference demo | Google Colab Pro | RTX PRO 6000 (96 GB), BF16 |
 | Edge deployment | Ollama on laptop | CPU (E2B, 5.1B params) |
 
