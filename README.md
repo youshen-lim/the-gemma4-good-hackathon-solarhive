@@ -367,7 +367,7 @@ deployment with future voice interaction.
   (CoVoST 35.54 — unavailable on 26B A4B/31B). All Gemma 4 models
   share the same native function-calling protocol, so E4B retains full
   tool-use capability at the edge. Trains in just 282s on RTX PRO 6000.
-  LoRA adapters export to GGUF for Ollama.
+  LoRA adapters merge to safetensors for Ollama.
 
 - **E2B for Ollama serving (not E4B):** At 2.3B effective parameters,
   E2B runs on laptop CPU without a GPU — the strongest local-first,
@@ -645,12 +645,23 @@ geographic patterns, and cross-validate between independent sources.
 ### Local Deployment via Ollama
 
 ```bash
-# After fine-tuning E4B via solarhive_finetune.py:
-# Option 1: Import safetensors directly (GGUF export has known mmproj issue)
-ollama create solarhive -f Modelfile
+# Download merged safetensors from HuggingFace
+git clone https://huggingface.co/Truthseeker87/solarhive-e4b-ollama
+cd solarhive-e4b-ollama
 
-# Option 2: Pull from HuggingFace (after upload)
-# See HuggingFace model card for instructions
+# Create Modelfile (FROM . points to safetensors in current directory)
+cat > Modelfile << 'EOF'
+FROM .
+SYSTEM "You are SolarHive, an AI energy advisor for a community of 12 homes with rooftop solar and shared battery storage in Ann Arbor, Michigan."
+PARAMETER temperature 1.0
+PARAMETER top_p 0.95
+PARAMETER top_k 64
+PARAMETER num_ctx 4096
+EOF
+
+# Import model (--experimental required for Gemma 4 safetensors)
+ollama create solarhive --experimental -f Modelfile
+ollama run solarhive "What's the best time to run my dishwasher today?"
 ```
 
 **Local-first, privacy-first:** Running via Ollama means community
