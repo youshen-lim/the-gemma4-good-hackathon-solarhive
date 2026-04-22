@@ -792,9 +792,11 @@ community-level optimization.
 | Resource | Link | Purpose |
 |----------|------|---------|
 | **Live Demo** | [HF Space](https://huggingface.co/spaces/Truthseeker87/solarhive) | Interactive Gradio demo (ZeroGPU) |
-| **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Production inference — no Unsloth needed |
-| **26B A4B LoRA** | [solarhive-26b-a4b-lora](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) | LoRA adapters for further fine-tuning |
-| **E4B Ollama** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge deployment via Ollama |
+| **26B A4B LoRA** | [solarhive-26b-a4b-lora](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) | Cloud LoRA adapters via Unsloth (Unsloth track) |
+| **26B A4B NF4** | [solarhive-26b-a4b-nf4](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-nf4) | Pre-quantized 4-bit cloud model for HF Spaces / 24 GB+ GPUs |
+| **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Full BF16 merged cloud model |
+| **E4B safetensors** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge model — merged safetensors source for transformers / GGUF conversion via llama.cpp |
+| **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment** — Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. **10/10 benchmark**. (Ollama + llama.cpp tracks) |
 | **Dataset** | [solarhive-community-solar-1k](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-1k) | 1,029 training examples |
 
 ---
@@ -805,8 +807,8 @@ community-level optimization.
 |------|--------|
 | Competition | [The Gemma 4 Good Hackathon](https://kaggle.com/competitions/gemma-4-good-hackathon) |
 | Organizers | Google DeepMind x Kaggle |
-| Track | Global Resilience |
-| Special Tech | Ollama + Unsloth |
+| Main Track | Global Resilience |
+| Special Tech tracks | **Ollama** (E4B GGUF, 10/10 benchmark) + **llama.cpp** (mmproj + PLE-override on 16 GB CPU) + **Unsloth** (dual fine-tune) |
 | Deadline | May 18, 2026 at 11:59 PM UTC |
 | Kaggle profile | [melricko](https://kaggle.com/melricko) |
 | GitHub | [youshen-lim/the-gemma4-good-hackathon-solarhive](https://github.com/youshen-lim/the-gemma4-good-hackathon-solarhive) |
