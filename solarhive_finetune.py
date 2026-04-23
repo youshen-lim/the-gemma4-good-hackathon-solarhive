@@ -60,7 +60,7 @@ _sp.check_call([
     "transformers>=5.5.0",   # upgrades from Kaggle's 5.0.0 to >=5.5.0
     "accelerate",             # installs if missing, skipped if present
     "bitsandbytes",           # installs if missing, skipped if present
-    "unsloth>=2025.4.7",      # Gemma 4 GGUF/vision fixes require recent build
+    "unsloth==2026.4.5",      # Training provenance pin — matches the Unsloth version used to produce the published HF weights; exact pin ensures bit-reproducibility
     "trl",                    # installs if missing, skipped if present
     "datasets",               # installs if missing, skipped if present
 ])
@@ -3275,7 +3275,7 @@ import subprocess as _sp, sys as _sys
 _sp.check_call([
     _sys.executable, "-m", "pip", "install", "-q",
     "transformers>=5.5.0", "accelerate", "bitsandbytes",
-    "unsloth>=2025.4.7", "huggingface_hub",
+    "unsloth==2026.4.5", "huggingface_hub",  # exact pin: matches Cell 0 training-provenance pin
 ])
 
 import os, json, shutil, torch

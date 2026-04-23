@@ -696,6 +696,19 @@ ollama run solarhive "What's the best time to run my dishwasher today?"
 energy data never leaves the neighborhood — no cloud dependency, no
 latency penalty, no data privacy concerns.
 
+### Training Provenance
+
+Published weights on Hugging Face (`Truthseeker87/solarhive-*`) were
+trained with **Unsloth `2026.4.5`** on Colab Pro (NVIDIA RTX PRO 6000
+Blackwell, 96 GB GDDR7) in April 2026. `solarhive_finetune.py` pins
+`unsloth==2026.4.5` exactly so the published weights can be re-derived
+bit-identically from the released source. Later Unsloth releases
+contain ongoing kernel and optimizer patches that may shift loss
+trajectories slightly — keep the pin at `2026.4.5` for exact
+reproducibility of the Hugging Face artefacts, or bump it if you
+prefer the latest upstream fixes at the cost of divergence from the
+published training log.
+
 ---
 
 ## Real-World Impact
