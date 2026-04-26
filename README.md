@@ -451,6 +451,26 @@ One fine-tuning pipeline (Unsloth), one training dataset (1,029 examples), one c
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama, llama.cpp, or LiteRT keeps community energy data inside the neighborhood. No cloud dependency, no latency penalty, no privacy concerns — the AI runs where the community lives.
 
+### On-device reasoning pattern — deterministic workflow + E2B LiteRT
+
+For the Phone / browser tier specifically, the recommended pattern is to couple the on-device E2B LiteRT model with a **deterministic workflow that pulls live data on the device or at a local endpoint, then injects the fetched values into the E2B prompt as grounded context.** E2B reasons over the context and emits the compact emoji response; it does not orchestrate API calls directly.
+
+```
+1. User taps "Run dishwasher?"
+2. Device workflow fetches weather / GHI / battery / grid rates
+   (native API calls, local sensor reads, or a server-side proxy)
+3. Context is inlined into the E2B prompt:
+     "Context: ☀️ clear, 820 W/m² GHI, 🔋 78%, 🟢 off-peak $0.08/kWh.
+      User: Run dishwasher?"
+4. E2B (LiteRT / MediaPipe Web / litert-lm) emits:
+     "☀️🟢 Run now, peak solar plus off-peak grid."
+5. UI renders leading emojis large + text underneath.
+```
+
+**Why this beats on-device tool calling at the ultra-edge tier:** smaller models degrade on structured tool-call output; client-side tool calling exposes API keys in page source; the emoji system prompt conflicts with a tool-calling system prompt. The deterministic workflow handles orchestration as plain code and hands E2B a single well-scoped reasoning task. The pattern works identically on native mobile (Swift / Kotlin / Flutter), browser (MediaPipe LLM Inference Web + WebGPU), and Raspberry Pi 5 (`litert-lm` Python), and degrades gracefully to cached values when APIs are unreachable.
+
+See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-merged) (once published) for the full deployment recipe and the `solarhive_e2b_liteRT_finetune.ipynb` notebook for the fine-tune pipeline.
+
 ---
 
 ## Architecture
@@ -708,6 +728,47 @@ trajectories slightly — keep the pin at `2026.4.5` for exact
 reproducibility of the Hugging Face artefacts, or bump it if you
 prefer the latest upstream fixes at the cost of divergence from the
 published training log.
+
+### Notebook Provenance Note (April 25, 2026)
+
+`solarhive_finetune.py` was audited against the official Unsloth Gemma 4
+documentation
+([overview](https://unsloth.ai/docs/models/gemma-4),
+[training guide](https://unsloth.ai/docs/models/gemma-4/train),
+[bug fixes & tips](https://unsloth.ai/docs/models/gemma-4/train#bug-fixes--tips))
+and four classes of forward-only edit were applied to align the notebook
+with documented best practices: explicit loader arguments
+(`max_seq_length`, `dtype`, `full_finetuning`), explicit `SFTConfig`
+arguments (`weight_decay`, `lr_scheduler_type`, `max_grad_norm`), and an
+E4B chat-template switch from `gemma-4-thinking` to `gemma-4` per
+Unsloth's per-variant recommendation (Tip #1: thinking template is for
+26B/31B reasoning-class variants). 26B A4B retains
+`chat_template="gemma-4-thinking"` because Tip #1 specifies it for that
+variant size. **The published v1 weights linked above are unchanged by
+these edits** — the changes affect only future training runs. Full
+audit record in `solarhive_finetune_audit.md`.
+
+### Roadmap — v2 Multimodal (Option A)
+
+A second-generation multimodal fine-tune is planned: extend the existing
+1,029-example text dataset with ~150–200 sky-image + cloud-label pairs
+(SWIMSEG / SWINSEG / SWIMCAT and NREL SRRL Baseline Measurement System,
+both free for research) so the model can reason directly over visual
+sky conditions in addition to text queries. The v2 fine-tune publishes
+to a parallel set of Hugging Face repositories so the v1 artifacts
+above remain frozen and reproducible:
+
+| Tier | v1 (text-only, frozen) | v2 (multimodal, planned) |
+|---|---|---|
+| Cloud LoRA | `Truthseeker87/solarhive-26b-a4b-lora` | `Truthseeker87/solarhive-26b-a4b-multimodal-lora` |
+| Edge safetensors | `Truthseeker87/solarhive-e4b-ollama` | `Truthseeker87/solarhive-e4b-multimodal-ollama` |
+| Edge GGUF | `Truthseeker87/solarhive-e4b-gguf` | `Truthseeker87/solarhive-e4b-multimodal-gguf` |
+| Training dataset | `Truthseeker87/solarhive-community-solar-1k` | `Truthseeker87/solarhive-community-solar-multimodal` |
+
+This versioning keeps the Run 6 (8/8 cloud) and Sol B (10/10 Ollama
+edge) benchmark narratives bound to the specific weights they describe,
+while the v2 repos can publish new text+image benchmarks without
+rewriting v1 history.
 
 ---
 
