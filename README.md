@@ -383,26 +383,36 @@ deployment with future voice interaction.
   marginal gain does not justify the cost for a community energy
   advisor.
 
-Two models fine-tuned on 1,029 community solar energy examples using
-Unsloth LoRA, targeting both cloud and edge deployment:
+Two models fine-tuned via Unsloth LoRA on the canonical SolarHive
+training corpus, targeting both cloud and edge deployment:
 
 | Model | Role | Training | Export |
 |-------|------|----------|--------|
 | Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | LoRA r=16, BF16, 4,393s | LoRA adapters |
 | Gemma 4 E4B (8B) | Edge deployment via Ollama | LoRA r=16, BF16, 282s | LoRA → Ollama |
 
-**Training data:** 929 Q&A across 9 energy domains + 100 tool-calling
-examples (50 with tool invocations, 50 without — teaching the model
-when NOT to call tools). Two complementary sources:
+**Training data:** [`solarhive-community-solar-multimodal`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) — **1,727 rows** (1,713 text + 14 image-grounded), ~347K tokens. Composition:
 
-- **413 hand-crafted static examples** spanning 15+ US cities, covering
-  sky conditions, battery management, panel health, consumption
+- **413 hand-crafted Q&A** spanning 15+ US cities and 9 energy domains
+  (sky conditions, battery management, panel health, consumption
   optimization, community/grid strategy, emergency resilience, seasonal
-  planning, multi-step reasoning, and alternative storage
-- **516 API-grounded examples** generated from live Open-Meteo, PVWatts,
-  OpenWeatherMap, and EIA data for Ann Arbor, MI and San Mateo, CA —
-  including hourly production scenarios, PVWatts cross-validation,
-  grid mix analysis, weather impact, and battery/grid strategy
+  planning, multi-step reasoning, alternative storage)
+- **~1,117 API-grounded Q&A** generated from live Open-Meteo (GHI/DNI/DHI,
+  low/mid/high cloud cover), NREL PVWatts v8, OpenWeatherMap, and EIA
+  Open Data v2 — joined on `(location, hourly timestamp)` so each
+  multi-source example carries co-occurring grounding for Ann Arbor, MI
+  and San Mateo, CA
+- **183 tool-calling examples** following the [When2Call](https://arxiv.org/abs/2504.18851)
+  taxonomy — 106 *should-call*, 53 *should-not-call*, 10 *unable-to-answer*,
+  6 *follow-up clarification*, 8 failure-recovery — so the model learns
+  when to call tools, when to refuse politely, when to admit a tool
+  can't answer, and when to ask a clarifying question
+- **14 image-grounded Q&A turns** from 7 manually-labeled Ann Arbor sky
+  photographs (cloud type + percentage cloud cover, expected production
+  traced via the same temperature-derated GHI formula used elsewhere)
+
+Every numeric claim in an algorithmic answer traces to a real API
+response — no LLM-generated numbers.
 
 **Shared hyperparameters:** LoRA rank=16, alpha=16, dropout=0,
 target=all-linear, lr=2e-4, optimizer=adamw_8bit, warmup=5 steps,
@@ -416,7 +426,16 @@ by free GPU VRAM at runtime.
 | Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 6/8 (5/5 Q&A, 1/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 4,393s |
 | Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 7/8 (5/5 Q&A, 2/3 tool) | — | 282s |
 
-*Isolated benchmarks run without tool schemas. Production benchmarks run in the full agentic loop with tool definitions passed via `apply_chat_template(tools=[...])`. The 26B A4B reliably calls tools when given the function signatures it was trained on.*
+*Benchmark provenance:* loss/time/score numbers above were measured on
+the v1 fine-tune (trained on a 1,029-row subset of this corpus); the
+26B A4B LoRA repository was refreshed in-place on April 30, 2026 with
+a v2 fine-tune trained on the full 1,727-row corpus (text-only — image
+rows skipped at data-prep). v2 re-benchmark is pending.
+
+*Isolated benchmarks run without tool schemas. Production benchmarks
+run in the full agentic loop with tool definitions passed via
+`apply_chat_template(tools=[...])`. The 26B A4B reliably calls tools
+when given the function signatures it was trained on.*
 
 ### Edge GGUF deployment — both Q4_K_M variants score 10/10 on a 16 GB laptop
 
@@ -445,7 +464,7 @@ The same fine-tuned SolarHive model family serves four distinct hardware classes
 | **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 parity benchmark proven |
 | **Cloud** | HF Space / Colab | — | — | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | ✅ Live demo + 8/8 agentic benchmark |
 
-One fine-tuning pipeline (Unsloth), one training dataset (1,029 examples), one chat template, four hardware classes, four Special Tech tracks (LiteRT, llama.cpp, Ollama, Unsloth) — the deployment target is the only variable.
+One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical corpus), one chat template, four hardware classes, four Special Tech tracks (LiteRT, llama.cpp, Ollama, Unsloth) — the deployment target is the only variable.
 
 **Why the Jetson Orin Nano Super matters:** at 7–25 W on a $249 board, a single Jetson can run 24/7 from a modest solar-plus-battery setup — the SolarHive intelligence runs on the same energy infrastructure it advises. Mobile clients on the local network hit the hub at `http://<hub-ip>:8080` for tool-calling responses with live API data. Nvidia's [official Gemma 4 Jetson recipe](https://huggingface.co/blog/nvidia/gemma4) uses our exact llama.cpp stack; our `solarhive-e4b-q4_k_m.gguf` (4.61 GB) drops in directly with only the CUDA build flag change (`-DGGML_CUDA=ON`, `-DCMAKE_CUDA_ARCHITECTURES="87"`).
 
