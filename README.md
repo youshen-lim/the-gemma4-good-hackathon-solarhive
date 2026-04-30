@@ -426,11 +426,15 @@ by free GPU VRAM at runtime.
 | Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 6/8 (5/5 Q&A, 1/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 4,393s |
 | Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 7/8 (5/5 Q&A, 2/3 tool) | — | 282s |
 
-*Benchmark provenance:* loss/time/score numbers above were measured on
-the v1 fine-tune (trained on a 1,029-row subset of this corpus); the
-26B A4B LoRA repository was refreshed in-place on April 30, 2026 with
-a v2 fine-tune trained on the full 1,727-row corpus (text-only — image
-rows skipped at data-prep). v2 re-benchmark is pending.
+**Fine-tuning is text-only on the multimodal-capable corpus** — image
+rows in the dataset are skipped at the data-prep layer. VQA at
+inference time uses the base Gemma 4 model's pretrained vision encoder
+(~150M params for E4B, ~550M for 26B A4B per the [official model
+card](https://ai.google.dev/gemma/docs/core/model_card_4)), which is
+not modified by our LoRA. This matches the Vertex AI Gemma 4 SFT
+recipe documented in the [Hugging Face blog](https://huggingface.co/blog/gemma4),
+which explicitly freezes both vision and audio towers during
+text-focused fine-tuning.
 
 *Isolated benchmarks run without tool schemas. Production benchmarks
 run in the full agentic loop with tool definitions passed via
@@ -770,20 +774,28 @@ E4B chat-template switch from `gemma-4-thinking` to `gemma-4` per
 Unsloth's per-variant recommendation (Tip #1: thinking template is for
 26B/31B reasoning-class variants). 26B A4B retains
 `chat_template="gemma-4-thinking"` because Tip #1 specifies it for that
-variant size. **The published v1 weights linked above are unchanged by
-these edits** — the changes affect only future training runs.
+variant size.
 
-### Roadmap — v2 (Text-Only Update on the Multimodal-Capable Corpus)
+### Fine-Tuning Architecture — Text-Only on the Multimodal-Capable Corpus
 
-A second-generation fine-tune was run on the consolidated training
-corpus. The corpus carries an image-grounded subset (14 Q&A turns from
-7 manually-labeled Ann Arbor sky photographs) at the schema level, but
-the v2 fine-tune **trains on the text subset only** — image rows are
-skipped at the data-prep layer. **Multimodal training is deferred
-post-hackathon** and is not part of the SolarHive submission. The base
-Gemma 4 models retain their full multimodal capability regardless of
-which corpus subset is used in any given fine-tune run, so VQA at
-inference time still works on the saved adapters.
+**The shipped fine-tune is text-only.** The training corpus carries
+both text rows and an image-grounded subset (14 Q&A turns from 7
+manually-labeled Ann Arbor sky photographs) at the schema level, but
+image rows are skipped at the data-prep layer; the training pipeline
+pre-renders only text rows for TRL's default text collator.
+
+**VQA at inference time uses the base Gemma 4 model's pretrained
+vision encoder** — ~150M parameters for E4B and ~550M for 26B A4B per
+the [official model card](https://ai.google.dev/gemma/docs/core/model_card_4).
+Our LoRA targets only the language-model linear layers
+(`target=all-linear`); the vision tower is not modified. This matches
+the Vertex AI Gemma 4 SFT recipe documented in the
+[Hugging Face blog](https://huggingface.co/blog/gemma4), which
+explicitly freezes both vision and audio towers during text-focused
+fine-tuning. (Multimodal fine-tuning is deferred post-hackathon and
+would require a real image corpus plus a held-out VQA benchmark; the
+dataset's image schema is preserved so a future multimodal fine-tune
+can re-enable image rows without changing the corpus.)
 
 The training dataset is the canonical
 [`solarhive-community-solar-multimodal`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal)

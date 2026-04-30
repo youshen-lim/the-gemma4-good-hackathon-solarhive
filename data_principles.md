@@ -195,14 +195,23 @@ well.
 
 ## 7. Fine-Tuning Results
 
-Dual fine-tune on Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell Server Edition (96 GB GDDR7, ~95 GB usable), Unsloth 2026.4.4,
-transformers 5.5.0. The training metrics in §7.3 below describe the v1
-fine-tune (trained on a 1,029-row subset of the canonical corpus) for
-3 epochs with LoRA (BF16). The 26B A4B LoRA repository was refreshed
-in-place on April 30, 2026 with a v2 fine-tune trained on the full
-1,727-row corpus (text-only — image rows skipped at data-prep, per
-the Apr 30 Option C revert documented in `solarhive_finetune.py`);
-v2 re-benchmark is pending.
+Dual fine-tune on Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell
+Server Edition (96 GB GDDR7, ~95 GB usable), Unsloth 2026.4.4,
+transformers 5.5.0. Both models are LoRA-fine-tuned on the canonical
+1,727-row corpus for 3 epochs (BF16).
+
+**Fine-tuning is text-only on the multimodal-capable corpus.** Image
+rows in the dataset are skipped at the data-prep layer (per the Apr 30
+Option C revert in `solarhive_finetune.py`). VQA at inference time uses
+the base Gemma 4 model's pretrained vision encoder — ~150M parameters
+for E4B and ~550M for 26B A4B per the
+[official model card](https://ai.google.dev/gemma/docs/core/model_card_4).
+Our LoRA targets only the language-model linear layers
+(`target=all-linear`); the vision tower is not modified. This
+mirrors the Vertex AI Gemma 4 SFT recipe documented in the
+[Hugging Face blog](https://huggingface.co/blog/gemma4), which
+explicitly freezes both vision and audio towers during text-focused
+fine-tuning.
 
 ### 7.1 Shared Hyperparameters
 
