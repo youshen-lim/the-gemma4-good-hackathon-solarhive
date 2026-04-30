@@ -1,0 +1,249 @@
+/* SolarHive LiteRT — mobile-first, no framework, no build step.
+   Color tokens follow the GitHub README banner palette (deep navy + sun yellow). */
+
+:root {
+  --bg: #0f172a;
+  --bg-elevated: #1e293b;
+  --fg: #f8fafc;
+  --fg-muted: #94a3b8;
+  --accent: #fbbf24;
+  --accent-warm: #f59e0b;
+  --rail: #334155;
+  --pad: 16px;
+  --radius: 14px;
+}
+
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html, body { height: 100%; }
+
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font: 16px/1.5 -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#app {
+  max-width: 540px;
+  margin: 0 auto;
+  min-height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Screens (one visible at a time) ------------------------------------- */
+
+.screen {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  padding: var(--pad);
+  gap: var(--pad);
+}
+
+.screen[hidden] { display: none; }
+
+/* --- Onboarding ---------------------------------------------------------- */
+
+#onboarding { justify-content: center; text-align: center; }
+
+#onboarding h1 {
+  font-size: 36px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--accent);
+}
+
+#onboarding .subtitle { color: var(--fg-muted); margin-bottom: 32px; }
+
+#onboarding .prompt { font-size: 18px; margin-bottom: 8px; }
+
+.mode-buttons {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin: 16px 0;
+}
+
+.mode-btn {
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 2px solid transparent;
+  border-radius: var(--radius);
+  padding: 20px 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  cursor: pointer;
+  transition: border-color 120ms, transform 80ms;
+}
+
+.mode-btn:hover, .mode-btn:focus { border-color: var(--accent); outline: none; }
+.mode-btn:active { transform: scale(0.98); }
+
+.mode-emoji { font-size: 56px; line-height: 1; }
+.mode-label { font-size: 18px; font-weight: 600; }
+.mode-hint { color: var(--fg-muted); font-size: 14px; }
+
+.footnote {
+  color: var(--fg-muted);
+  font-size: 13px;
+  text-align: center;
+  margin-top: auto;
+  padding-top: 24px;
+}
+
+/* --- Loading ------------------------------------------------------------- */
+
+#loading { justify-content: center; align-items: center; text-align: center; }
+
+#loading h2 { font-size: 18px; font-weight: 500; }
+
+.progress-shell {
+  width: 80%;
+  height: 6px;
+  background: var(--rail);
+  border-radius: 3px;
+  overflow: hidden;
+}
+
+.progress-bar {
+  height: 100%;
+  width: 0%;
+  background: linear-gradient(90deg, var(--accent), var(--accent-warm));
+  transition: width 200ms;
+}
+
+.status-text { color: var(--fg-muted); font-size: 14px; }
+
+/* --- Chat shell ---------------------------------------------------------- */
+
+.topbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 4px 0 8px;
+}
+
+.mode-pill {
+  background: var(--bg-elevated);
+  padding: 6px 12px;
+  border-radius: 999px;
+  font-size: 14px;
+}
+
+.link-btn {
+  background: transparent;
+  border: none;
+  color: var(--accent);
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.emoji-card {
+  background: var(--bg-elevated);
+  border-radius: var(--radius);
+  padding: 32px var(--pad);
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  min-height: 220px;
+  justify-content: center;
+}
+
+.emoji-large {
+  font-size: 96px;
+  line-height: 1;
+}
+
+.emoji-text {
+  font-size: 18px;
+  font-weight: 500;
+  max-width: 28ch;
+}
+
+/* --- Routing escalation buttons ----------------------------------------- */
+
+.routing-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  justify-content: center;
+}
+
+.route-btn {
+  background: transparent;
+  color: var(--accent);
+  border: 1px solid var(--accent);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.route-btn:hover, .route-btn:focus { background: var(--accent); color: var(--bg); outline: none; }
+
+/* --- Chip row (example questions) --------------------------------------- */
+
+.chip-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--rail);
+  border-radius: 999px;
+  padding: 8px 12px;
+  font-size: 13px;
+  cursor: pointer;
+  transition: background 120ms;
+}
+
+.chip:hover, .chip:focus { background: var(--rail); outline: none; }
+
+/* --- Query input -------------------------------------------------------- */
+
+.query-form {
+  display: flex;
+  gap: 8px;
+  margin-top: auto;
+}
+
+#query-input {
+  flex: 1;
+  background: var(--bg-elevated);
+  color: var(--fg);
+  border: 1px solid var(--rail);
+  border-radius: var(--radius);
+  padding: 12px 14px;
+  font-size: 16px;
+}
+
+#query-input:focus { outline: 2px solid var(--accent); border-color: transparent; }
+
+#query-submit {
+  background: var(--accent);
+  color: var(--bg);
+  border: none;
+  border-radius: var(--radius);
+  padding: 0 20px;
+  font-size: 22px;
+  font-weight: 700;
+  cursor: pointer;
+}
+
+#query-submit:disabled { opacity: 0.5; cursor: wait; }
+
+/* --- Reduced motion ------------------------------------------------------ */
+
+@media (prefers-reduced-motion: reduce) {
+  .mode-btn, .progress-bar, .chip { transition: none; }
+}

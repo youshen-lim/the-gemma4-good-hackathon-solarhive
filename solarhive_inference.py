@@ -449,16 +449,17 @@ for fn in TOOLS:
 # prompt token, winning 47/70 benchmark-model tests with zero losses and no
 # latency increase. See: Leviathan, Kalman & Matias (2024), "Repeat to
 # Improve Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
-SYSTEM_PROMPT = (
+_UNIFIED_SYSTEM_BODY = (
     "You are SolarHive, an AI energy advisor for a community of 12 homes "
     "with rooftop solar and shared battery storage in Ann Arbor, Michigan. "
-    "Use the available tools to get real-time data before answering. "
-    "Be specific, reference actual data, and keep responses concise (3-5 sentences).\n\n"
-    "You are SolarHive, an AI energy advisor for a community of 12 homes "
-    "with rooftop solar and shared battery storage in Ann Arbor, Michigan. "
-    "Use the available tools to get real-time data before answering. "
+    "Provide specific, data-grounded advice on solar production, energy storage, "
+    "grid coordination, and panel maintenance. When the user asks about current "
+    "conditions (production, weather, battery state, grid status), call the "
+    "available tools to retrieve real-time data before answering. For general "
+    "guidance, scenario planning, or domain knowledge, answer directly. "
     "Be specific, reference actual data, and keep responses concise (3-5 sentences)."
 )
+SYSTEM_PROMPT = _UNIFIED_SYSTEM_BODY + "\n\n" + _UNIFIED_SYSTEM_BODY
 
 def generate_with_tools(messages, tools=TOOLS, max_tokens=1024, max_rounds=3, thinking=False):
     """
@@ -836,6 +837,124 @@ for q, expected, called, raw in _tool_results:
 
 print(f"\n  Tool accuracy: {_tool_correct}/{len(TOOL_BENCHMARK_QS)}")
 print("\n✅ Benchmark complete")
+
+"""## 11b: When2Call-Style Held-Out Probes
+
+Three probes added per `when2call_plan.md` Task W6, validating coverage of the
+4-way taxonomy from Ross, H., Mahabaleshwarkar, A. S., & Suhara, Y. (2025).
+*When2Call: When (not) to Call Tools.* arXiv:2504.18851.
+URL: https://arxiv.org/abs/2504.18851
+
+These probes check the failure modes the paper documents in untrained community
+models (9–67% tool-hallucination rates):
+
+  (d) Out-of-scope query → expect refusal + redirect (no tool call, names limit)
+  (c) Under-specified query → expect follow-up question (no tool call, asks back)
+  (b) Well-specified in-scope query → expect correct tool call
+
+Pre-W1+W2: v1 model fails (d) + (c) by hallucinating tools or auto-filling defaults.
+Post-D5 (v2 model trained with `_UNABLE_TO_ANSWER` + `_FOLLOW_UP_QUESTIONS`):
+expected 3/3 + zero regression on Run-6 8/8.
+"""
+
+# === CELL 11b: When2Call probes ================================================
+
+WHEN2CALL_PROBES = [
+    {
+        "category": "(d) Unable to answer",
+        "question": "What's the current air quality index in Ann Arbor?",
+        "expected_tool": None,
+        "must_contain_any": ["don't have", "do not have", "no tool", "AQI", "airnow", "air-quality", "air quality"],
+        "rationale": "No AQI tool — model should name the limit and redirect (e.g., airnow.gov)",
+    },
+    {
+        "category": "(c) Follow-up question",
+        "question": "How much will a 10 kW array produce today?",
+        "expected_tool": None,
+        "must_contain_any": ["which", "what", "where", "location", "city", "?"],
+        "rationale": "Location parameter missing — model should ask back, not auto-fill Ann Arbor",
+    },
+    {
+        "category": "(b) Tool call",
+        "question": "What's the current grid rate?",
+        "expected_tool": "get_grid_status",
+        "must_contain_any": None,
+        "rationale": "Well-specified in-scope query — confirms no over-correction toward conservatism",
+    },
+]
+
+
+def _run_when2call_probes():
+    """Run the 3 When2Call probes against the loaded model."""
+    results = []
+    for probe in WHEN2CALL_PROBES:
+        msgs = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": probe["question"]},
+        ]
+        text = processor.apply_chat_template(
+            msgs, tools=TOOLS, tokenize=False,
+            add_generation_prompt=True, enable_thinking=False,
+        )
+        inputs = processor(text=text, return_tensors="pt").to(model.device)
+        with torch.no_grad():
+            out = model.generate(
+                **inputs, max_new_tokens=512,
+                temperature=1.0, top_p=0.95, top_k=64,
+            )
+        raw = processor.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
+        calls = re.findall(r'call:(\w+)\{([^}]*)\}', raw)
+        called_tools = [c[0] for c in calls] if calls else []
+        parsed = processor.parse_response(raw)
+        text_response = parsed["content"] if isinstance(parsed, dict) else parsed
+
+        # Tool-call check
+        if probe["expected_tool"] is None:
+            tool_match = len(called_tools) == 0
+        else:
+            tool_match = probe["expected_tool"] in called_tools
+
+        # Content check (if specified)
+        if probe["must_contain_any"] is None:
+            content_match = True
+        else:
+            text_lower = (text_response or "").lower()
+            content_match = any(kw.lower() in text_lower for kw in probe["must_contain_any"])
+
+        passed = tool_match and content_match
+        results.append({
+            "category": probe["category"],
+            "question": probe["question"],
+            "expected_tool": probe["expected_tool"],
+            "called_tools": called_tools,
+            "response": text_response,
+            "tool_match": tool_match,
+            "content_match": content_match,
+            "passed": passed,
+            "rationale": probe["rationale"],
+        })
+    return results
+
+
+print("\n" + "=" * 60)
+print("When2Call Probes (Ross et al. 2025, arXiv:2504.18851)")
+print("=" * 60)
+
+_w2c_results = _run_when2call_probes()
+_w2c_correct = sum(1 for r in _w2c_results if r["passed"])
+
+for r in _w2c_results:
+    status = "PASS" if r["passed"] else "FAIL"
+    print(f"\n  [{status}] {r['category']}")
+    print(f"         Q: {r['question']}")
+    print(f"         Expected tool: {r['expected_tool'] or 'no tool call'} | Got: {r['called_tools'] or 'no tool call'}")
+    print(f"         Tool match: {r['tool_match']} | Content match: {r['content_match']}")
+    print(f"         Rationale: {r['rationale']}")
+    if r["response"]:
+        print(f"         Response: {r['response'][:200]}")
+
+print(f"\n  When2Call accuracy: {_w2c_correct}/{len(WHEN2CALL_PROBES)}")
+print("\n✅ When2Call probes complete")
 
 """## 12: Interactive Demo (for video capture)"""
 

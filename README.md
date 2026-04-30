@@ -479,7 +479,7 @@ See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-me
 Three Colab Notebooks — the complete pipeline:
 
 solarhive_datagen.py     Data generation: 4 live APIs → 551 training examples
-        ↓                + 12 diagnostic charts
+        ↓                + 14 diagnostic charts
 solarhive_finetune.py    Dual LoRA fine-tuning via Unsloth
         ↓                E4B (282s) + 26B A4B (4,393s)
 solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
@@ -603,8 +603,8 @@ the-gemma4-good-hackathon-solarhive/
 ├── README.md                    # This file
 ├── LICENSE                      # MIT License
 ├── data_principles.md           # Data methodology and training data documentation
-├── datagen_charts/              # 12 diagnostic charts from data generation pipeline
-│   ├── chart_01.png … chart_12.png
+├── datagen_charts/              # 14 diagnostic charts from data generation pipeline
+│   ├── chart_01.png … chart_14.png
 ├── solarhive_inference.py       # Gemma 4 26B A4B inference: VQA (3 modes) +
 │                                # native function calling + agentic loop + benchmarks
 ├── solarhive_inference.ipynb    # Jupyter notebook version
@@ -612,7 +612,7 @@ the-gemma4-good-hackathon-solarhive/
 │                                # E4B + 26B A4B → LoRA adapters
 ├── solarhive_finetune.ipynb     # Jupyter notebook version
 ├── solarhive_datagen.py         # Data generation: 4 live APIs → training examples
-│                                # + 12 diagnostic charts
+│                                # + 14 diagnostic charts
 └── solarhive_datagen.ipynb      # Jupyter notebook version
 ```
 
@@ -633,7 +633,7 @@ the-gemma4-good-hackathon-solarhive/
 
 ---
 
-## Data Pipeline Diagnostics (12 Charts from `solarhive_datagen.py`)
+## Data Pipeline Diagnostics (14 Charts from `solarhive_datagen.py`)
 
 All charts generated automatically from live API data during training
 data generation. These visualizations validate data quality, reveal
@@ -665,6 +665,13 @@ geographic patterns, and cross-validate between independent sources.
 | **Chart 9:** Monthly production — Open-Meteo vs NREL PVWatts. Strong seasonal agreement validates our GHI-based formula against NREL's industry-standard model | **Chart 10:** OWM current conditions snapshot at data generation time — temperature, clouds, wind, humidity for both locations |
 | ![Grid Fuel Mix](datagen_charts/chart_11.png) | ![Renewable & CO2](datagen_charts/chart_12.png) |
 | **Chart 11:** Average fuel mix — MISO (33.5% natural gas, 23.4% wind, 18.8% coal) vs CAISO (35.8% solar, 20.6% wind). CAISO's grid is dramatically cleaner | **Chart 12:** Renewable % and CO2 intensity over one week. CISO hits 100% renewable during midday solar peaks; MISO ranges 20-50%. CO2 intensity inversely tracks renewable share |
+
+### Atmospheric Decomposition
+
+| | |
+|:---:|:---:|
+| ![Irradiance Triple](datagen_charts/chart_13.png) | ![Cloud Cover Stack](datagen_charts/chart_14.png) |
+| **Chart 13:** Irradiance decomposition on a clear summer day — total GHI separated into direct-beam (DNI) and diffuse (DHI) components. Confirms the model trains on physically-decomposed solar radiation, not just total GHI, which matters for cloudy-day production estimates where diffuse dominates | **Chart 14:** Vertical cloud-cover composition by month (low / mid / high stratification). Low stratus (<3 km) attenuates GHI more aggressively than high cirrus (>8 km); the dataset exposes the model to seasonal shifts in cloud-layer composition, not just total cloud percentage |
 
 ---
 
@@ -745,30 +752,54 @@ Unsloth's per-variant recommendation (Tip #1: thinking template is for
 26B/31B reasoning-class variants). 26B A4B retains
 `chat_template="gemma-4-thinking"` because Tip #1 specifies it for that
 variant size. **The published v1 weights linked above are unchanged by
-these edits** — the changes affect only future training runs. Full
-audit record in `solarhive_finetune_audit.md`.
+these edits** — the changes affect only future training runs.
 
-### Roadmap — v2 Multimodal (Option A)
+### Roadmap — v2 (Text-Only Update on the Multimodal-Capable Corpus)
 
-A second-generation multimodal fine-tune is planned: extend the existing
-1,029-example text dataset with ~150–200 sky-image + cloud-label pairs
-(SWIMSEG / SWINSEG / SWIMCAT and NREL SRRL Baseline Measurement System,
-both free for research) so the model can reason directly over visual
-sky conditions in addition to text queries. The v2 fine-tune publishes
-to a parallel set of Hugging Face repositories so the v1 artifacts
-above remain frozen and reproducible:
+A second-generation fine-tune was run on the consolidated training
+corpus. The corpus carries an image-grounded subset (14 Q&A turns from
+7 manually-labeled Ann Arbor sky photographs) at the schema level, but
+the v2 fine-tune **trains on the text subset only** — image rows are
+skipped at the data-prep layer. **Multimodal training is deferred
+post-hackathon** and is not part of the SolarHive submission. The base
+Gemma 4 models retain their full multimodal capability regardless of
+which corpus subset is used in any given fine-tune run, so VQA at
+inference time still works on the saved adapters.
 
-| Tier | v1 (text-only, frozen) | v2 (multimodal, planned) |
-|---|---|---|
-| Cloud LoRA | `Truthseeker87/solarhive-26b-a4b-lora` | `Truthseeker87/solarhive-26b-a4b-multimodal-lora` |
-| Edge safetensors | `Truthseeker87/solarhive-e4b-ollama` | `Truthseeker87/solarhive-e4b-multimodal-ollama` |
-| Edge GGUF | `Truthseeker87/solarhive-e4b-gguf` | `Truthseeker87/solarhive-e4b-multimodal-gguf` |
-| Training dataset | `Truthseeker87/solarhive-community-solar-1k` | `Truthseeker87/solarhive-community-solar-multimodal` |
+The training dataset is the canonical
+[`solarhive-community-solar-multimodal`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal)
+repository (1,727 rows). All hand-crafted training rows are also
+preserved verbatim in `solarhive_datagen.py` Cell 7a as
+`LEGACY_DATA` + `LEGACY_TOOL_CALL_DATA`, so the dataset is
+fully reproducible from the version-controlled data-generation
+pipeline.
 
-This versioning keeps the Run 6 (8/8 cloud) and Sol B (10/10 Ollama
-edge) benchmark narratives bound to the specific weights they describe,
-while the v2 repos can publish new text+image benchmarks without
-rewriting v1 history.
+The canonical dataset holds **1,713 text rows + 14 image-grounded Q&A
+turns** from 7 Ann Arbor sky photographs. Image-corpus sourcing went
+through two earlier rejections: the SWIM corpora from the National
+University of Singapore (CC BY-NC licensing + registration-gated
+download) and the NREL Solar Radiation Research Laboratory's legacy
+Sky Imager archive (stopped publishing raw images in May 2017).
+Neither offered a license-compatible direct download; the shipped
+image set is smaller than originally planned but every label is
+human-confirmed and every paired Q&A is grounded in the same
+temperature-derated GHI formula used throughout the dataset.
+
+Tool-calling coverage now includes realistic *follow-up clarification*
+and *unable-to-answer* categories following Ross et al. (2025)
+[*When2Call: When (not) to Call Tools*](https://arxiv.org/abs/2504.18851).
+
+Multi-step planning answers (weekly summaries, seasonal maintenance
+plans, annual reports) report aggregate production using both an
+**average** (mean over daylight hours, composes correctly with cost
+and CO2 calculations) and a **typical** value (median over daylight
+hours, robust to skew). This avoids the misleading 24-hour mean that
+would otherwise halve visible efficiency by including 12 hours of
+nighttime zeros.
+
+This versioning keeps the v1 benchmarks bound to the specific weights
+they describe, while v2 repositories can publish new text benchmarks
+without rewriting v1 history.
 
 ---
 
@@ -899,7 +930,7 @@ community-level optimization.
 | **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Full BF16 merged cloud model |
 | **E4B safetensors** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge model — merged safetensors source for transformers / GGUF conversion via llama.cpp |
 | **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment** — Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. **10/10 benchmark**. (Ollama + llama.cpp tracks) |
-| **Dataset** | [solarhive-community-solar-1k](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-1k) | 1,029 training examples |
+| **Dataset** | [solarhive-community-solar-multimodal](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) | 1,727 training examples (1,713 text + 14 image-grounded) |
 
 ---
 

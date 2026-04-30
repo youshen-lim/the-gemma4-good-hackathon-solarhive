@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>SolarHive — Edge Energy Advisor</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main id="app">
+    <!-- Onboarding screen — shown once, persisted to localStorage -->
+    <section id="onboarding" class="screen" hidden>
+      <h1>SolarHive</h1>
+      <p class="subtitle">Edge AI energy advisor for community solar</p>
+      <p class="prompt">Are your panels…</p>
+      <div class="mode-buttons">
+        <button class="mode-btn" data-mode="SUBURBAN" aria-label="Rooftop-fixed">
+          <span class="mode-emoji">🏘️</span>
+          <span class="mode-label">Rooftop-fixed</span>
+          <span class="mode-hint">Maintenance &amp; daily decisions</span>
+        </button>
+        <button class="mode-btn" data-mode="RURAL_OFFGRID" aria-label="Deployable / off-grid">
+          <span class="mode-emoji">🌾</span>
+          <span class="mode-label">Deployable / off-grid</span>
+          <span class="mode-hint">Action prompts &amp; field deploy</span>
+        </button>
+      </div>
+      <p class="footnote">Runs entirely on-device via WebGPU + LiteRT.<br />Your queries never leave your browser.</p>
+    </section>
+
+    <!-- Loading screen — model download / WebGPU init -->
+    <section id="loading" class="screen" hidden>
+      <h2>Loading on-device model…</h2>
+      <div class="progress-shell"><div id="progress-bar" class="progress-bar"></div></div>
+      <p id="loading-status" class="status-text">Initializing WebGPU runtime…</p>
+      <p class="footnote">First load downloads the ~2.6 GB Gemma 4 E2B bundle.<br />Cached for subsequent visits.</p>
+    </section>
+
+    <!-- Main chat shell — dashboard rendered into #emoji-card by app.js -->
+    <section id="chat" class="screen" hidden>
+      <header class="topbar">
+        <span id="mode-pill" class="mode-pill">🏘️ Suburban</span>
+        <button id="reset-mode" class="link-btn" aria-label="Switch mode">Switch mode</button>
+      </header>
+
+      <div id="emoji-card" class="emoji-card" aria-live="polite">
+        <span class="emoji-large" id="emoji-large">☀️</span>
+        <p class="emoji-text" id="emoji-text">Ask anything about your solar setup.</p>
+      </div>
+
+      <div id="routing-actions" class="routing-actions" hidden>
+        <button id="route-cloud" class="route-btn" hidden>🛰️ Ask cloud (26B A4B)</button>
+        <button id="route-hub" class="route-btn" hidden>📡 Sync with hub</button>
+        <button id="route-vqa" class="route-btn" hidden>🔬 Analyze panel photo</button>
+      </div>
+
+      <div class="chip-row" id="chip-row">
+        <!-- example chips populated by app.js based on mode -->
+      </div>
+
+      <form id="query-form" class="query-form">
+        <input
+          type="text"
+          id="query-input"
+          autocomplete="off"
+          placeholder="Ask SolarHive…"
+          aria-label="Question"
+        />
+        <button type="submit" id="query-submit" aria-label="Send">→</button>
+      </form>
+
+      <p class="footnote">Powered by Gemma 4 E2B · LiteRT · WebGPU · MediaPipe LLM Inference Web</p>
+    </section>
+  </main>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>

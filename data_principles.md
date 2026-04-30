@@ -174,7 +174,7 @@ This avoids the common pitfall of over-generating data that shifts category
 balance and introduces regressions in categories that were already performing
 well.
 
-## 7. Fine-Tuning Results (Apr 14, 2026)
+## 7. Fine-Tuning Results
 
 Dual fine-tune on Google Colab G4 VM — NVIDIA RTX PRO 6000 Blackwell Server Edition (96 GB GDDR7, ~95 GB usable), Unsloth 2026.4.4,
 transformers 5.5.0. Both models trained on the same 1,029 examples (929 Q&A +
@@ -210,7 +210,7 @@ learning signal quality (e.g., batch=1 × accum=8 ≈ batch=8 × accum=1, just s
 | ≥ 20 GB | 2 × 8 = **16** | 1 × 8 = **8** |
 | < 20 GB | 1 × 8 = **8** | 1 × 4 = **4** |
 
-**Run 1 result:** ~33 GB free after loading each model → E4B: 4×4=16, 26B A4B: 1×8=8.
+**Result:** ~33 GB free after loading each model → E4B: 4×4=16, 26B A4B: 1×8=8.
 The smaller effective batch for 26B A4B means more gradient updates per epoch (387 vs 195 steps),
 giving it finer-grained learning — likely contributing to its lower converged loss.
 
