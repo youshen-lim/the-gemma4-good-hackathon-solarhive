@@ -293,7 +293,7 @@ not blindly fetching everything. This demonstrates genuine agentic
 reasoning.
 
 **Inference-time When2Call validation (`solarhive_inference.py` §11b — `WHEN2CALL_PROBES`).**
-Three held-out probes added per `when2call_plan.md` Task W6 validate
+Three held-out probes added  validate
 coverage of 3 of the 4 failure-mode categories from
 [Ross, H., Mahabaleshwarkar, A. S., & Suhara, Y. (2025).
 *When2Call: When (not) to Call Tools.* arXiv:2504.18851](https://arxiv.org/abs/2504.18851).
@@ -308,8 +308,8 @@ and unable-to-answer examples.
 | **(c)**  | "How much will a 10 kW array produce today?"       | Follow-up question (asks for location) — does NOT auto-fill Ann Arbor |
 | **(d)**  | "What's the current air quality index in Ann Arbor?" | Polite refusal + redirect (e.g., airnow.gov) — does NOT hallucinate an `get_aqi` tool |
 
-Pre-W1+W2 (v1 model): fails (c) + (d) by hallucinating tools or
-auto-filling defaults. Post-D5 (v2 model trained with
+Without the When2Call categories in training (v1 corpus): fails (c) + (d) by hallucinating tools or
+auto-filling defaults. With the When2Call categories trained in (v2 model trained with
 `_UNABLE_TO_ANSWER` + `_FOLLOW_UP_QUESTIONS` corpus categories from
 [`solarhive_datagen.py`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal)):
 target 3/3 with zero regression on the Run-6 8/8 baseline.
@@ -528,7 +528,7 @@ The same fine-tuned SolarHive model family serves four distinct hardware classes
 
 | Tier | Hardware | Cost | Power | Runtime | Model variant | Track | Status |
 |------|----------|------|-------|---------|---------------|-------|--------|
-| **Phone** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | E2B `.tflite` | LiteRT | 🔜 planned (see `litert_plan.md`) |
+| **Phone** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | E2B `.tflite` | LiteRT | 🔜 planned (see the LiteRT browser deployment plan) |
 | **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M + mmproj (5.3 GB total) | llama.cpp | ✅ GGUF directly deployable today |
 | **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 parity benchmark proven |
 | **Cloud** | HF Space / Colab | — | — | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | ✅ Live demo + 8/8 agentic benchmark |
@@ -594,7 +594,7 @@ layers.
 
 ---
 
-## Live Demo Output (Inference Run 5, April 15 2026)
+## Live Demo Output (April 15, 2026 capture)
 
 Five interactive queries against the fine-tuned Gemma 4 26B A4B with LoRA
 adapters loaded via Unsloth. Real sky photos from Ann Arbor uploaded during
@@ -812,7 +812,7 @@ skip ~70 GB of HF downloads.
 End-to-end inference run on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell, 96 GB VRAM).
 All four loaded transformers variants score 9-10/10 on the 10-question parity
 benchmark; the E4B GGUF variant was deferred because Ollama is not pre-installed
-in Colab (separate local-machine validation plan documented in `inference_v2_plan.md`).
+in Colab (separate local-machine validation plan documented in the project's local-Ollama validation plan).
 Sampling defaults: `temperature=1.0, top_p=0.95, top_k=64` —
 [Unsloth-recommended](https://unsloth.ai/docs/models/gemma-4) Gemma 4 values.
 
@@ -849,7 +849,7 @@ The A4B-outperforms-E4B outcome on the When2Call (c)+(d) probes was the **expect
 
    > *"Gemma 4 models are available in 4 parameter sizes: E2B, E4B, 31B and 26B A4B. The models can be used with their default precision (16-bit) or with a lower precision using quantization. The different sizes and precisions represent a set of trade-offs for your AI application. **Models with higher parameters and bit counts (higher precision) are generally more capable, but are more expensive to run** in terms of processing cycles, memory cost and power consumption. Models with lower parameters and bit counts (lower precision) have less capabilities, but may be sufficient for your AI task."*
 
-2. **The When2Call paper** (Ross et al. 2025) documents the same size-vs-refusal scaling pattern empirically across community models — smaller models with less reasoning depth more readily hallucinate plausible-sounding data on under-specified or out-of-scope queries.
+2. **The [When2Call paper](https://arxiv.org/abs/2504.18851) (Ross et al. 2025)** documents the same size-vs-refusal scaling pattern empirically across community models — smaller models with less reasoning depth more readily hallucinate plausible-sounding data on under-specified or out-of-scope queries.
 
 Per the [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4), the four BF16-native release variants differ in capacity by an order of magnitude:
 
@@ -862,7 +862,7 @@ Per the [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_
 
 The 26B A4B picked for the SolarHive cloud demo activates only **3.8B parameters per token** at inference (MoE sparsity, comparable runtime cost to E4B's 4.5B effective) but accesses ~25B total knowledge capacity and a **3.7× larger vision encoder** than E4B. SolarHive's hypothesis going into the (2026-02-05) validation: on reasoning-heavy probes — When2Call (c) follow-up questioning, (d) refusal-vs-fabrication — A4B would outperform E4B because the official docs explicitly describe parameter count as the capability dimension, AND the paper documents exactly this scaling pattern. The validation confirms the prediction; the same v2 fine-tune applied to both produces 3/3 on A4B and 1/3 strict on E4B.
 
-**Empirical reinforcement from Unsloth's published Gemma 4 benchmarks** ([unsloth.ai/docs/models/gemma-4](https://unsloth.ai/docs/models/gemma-4)) — the 26B A4B leads E4B by **+13.2 pts on MMLU Pro** (82.6% vs 69.4%), **+21.2 pts on MMMU Pro** (73.8% vs 52.6%), **+45.8 pts on AIME 2026** (88.3% vs 42.5%), and **+25.1 pts on LiveCodeBench v6** (77.1% vs 52.0%). The 45.8 pp gap on AIME (math reasoning) and 21 pp gap on MMMU Pro (multimodal reasoning) **predict** the When2Call (c)/(d) regression we measured in the SolarHive validation — refusal/follow-up behavior is a reasoning task; the smaller model's published 13–46 pp gap on reasoning benchmarks scales cleanly into the 2-of-3 When2Call regression we observed.
+**Empirical reinforcement from Unsloth's published Gemma 4 benchmarks** ([unsloth.ai/docs/models/gemma-4](https://unsloth.ai/docs/models/gemma-4)) — the 26B A4B leads E4B by **+13.2 pts on MMLU Pro** (82.6% vs 69.4%), **+21.2 pts on MMMU Pro** (73.8% vs 52.6%), **+45.8 pts on AIME 2026** (88.3% vs 42.5%), and **+25.1 pts on LiveCodeBench v6** (77.1% vs 52.0%). The 45.8 pp gap on AIME (math reasoning) and 21 pp gap on MMMU Pro (multimodal reasoning) **predict** the [When2Call](https://arxiv.org/abs/2504.18851) (c)/(d) regression we measured in the SolarHive validation — refusal/follow-up behavior is a reasoning task; the smaller model's published 13–46 pp gap on reasoning benchmarks scales cleanly into the 2-of-3 When2Call regression we observed.
 
 **The takeaway is not "E4B is broken" — it is "the documented Gemma 4 capacity scaling translates predictably into refusal/follow-up behavior at our specific task, validating our hypothesis-driven model selection."** Architecture-aware deployment routing matches query difficulty to model capacity: well-specified queries hit E4B at the edge, under-specified or out-of-scope queries escalate to A4B in the cloud. Same fine-tune across both — the routing is what changes.
 
