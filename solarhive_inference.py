@@ -316,7 +316,7 @@ _today = _dt.now().strftime("%Y%m%d")
 _DRIVE_E4B_PATH = "/content/drive/MyDrive/models/gemma-4/transformers/gemma-4-e4b-it/1"
 # (_DRIVE_MODEL_PATH for A4B base is defined earlier in Cell 2a)
 
-# LoRA Drive backups (Run 4.5 convention)
+# LoRA Drive backups (canonical naming convention used across project notebooks)
 _DRIVE_A4B_LORA = "/content/drive/MyDrive/models/solarhive_a4b_lora"
 _DRIVE_E4B_LORA = "/content/drive/MyDrive/models/solarhive_e4b_lora"
 
@@ -338,10 +338,10 @@ def _resolve_dated_drive(prefix):
 _DRIVE_A4B_MERGED = _resolve_dated_drive("solarhive_a4b_merged")
 _DRIVE_A4B_NF4    = _resolve_dated_drive("solarhive_a4b_nf4")
 
-# E4B merged uses Run 4.5's fixed-name convention (folder name matches the HF
+# E4B merged uses the canonical fixed-name convention (folder name matches the HF
 # repo name `solarhive-e4b-ollama`, no date suffix). Date-versioned form is
 # checked as a forward-compatible fallback in case a future E4B merge run
-# adopts the OB22 convention.
+# adopts the established date-versioned cache convention.
 _DRIVE_E4B_MERGED_FIXED = "/content/drive/MyDrive/models/solarhive_e4b_ollama"
 _DRIVE_E4B_MERGED_DATED = _resolve_dated_drive("solarhive_e4b_merged")
 _DRIVE_E4B_MERGED = (
@@ -676,7 +676,7 @@ _TOOL_CALL_WRAPPED_RE = re.compile(r"<\|tool_call>call:(\w+)\{(.*?)\}<tool_call\
 _TOOL_CALL_BARE_RE = re.compile(r"call:(\w+)\{([^}]*)\}")
 
 # Args regex: handles strings (via `<|"|>` delimiters), ints, floats including
-# NEGATIVES, booleans, and null. Pre-fix used `(\d+\.?\d*)` which silently
+# NEGATIVES, booleans, and null. An earlier version used `(\d+\.?\d*)` which silently
 # dropped negative numbers (e.g., `temp_f:-5` in Ann Arbor January) — the arg
 # would be missing from the parsed dict and the tool function would fall back
 # to its default value, masking the model's actual intent.
@@ -1078,7 +1078,7 @@ TOOL_BENCHMARK_QS = [
      {"get_weather"}),
     ("What are the general maintenance tips for panels?",
      None),  # should NOT call a tool
-    # --- v2 additions (Phase C: expand benchmark 8 → 10) ---
+    # --- v2 additions (benchmark expanded from 8 → 10 questions) ---
     ("What's the grid pricing right now and what's the renewable mix?",
      {"get_grid_status"}),
     ("Compare today's irradiance forecast across Ann Arbor, Phoenix, and Seattle.",
@@ -1208,8 +1208,8 @@ print("\n✅ Benchmark complete")
 
 """## 11b: When2Call-Style Held-Out Probes
 
-Three probes added per `when2call_plan.md` Task W6, validating coverage of the
-4-way taxonomy from Ross, H., Mahabaleshwarkar, A. S., & Suhara, Y. (2025).
+Three held-out probes validating coverage of 3 of the 4 failure-mode
+categories from Ross, H., Mahabaleshwarkar, A. S., & Suhara, Y. (2025).
 *When2Call: When (not) to Call Tools.* arXiv:2504.18851.
 URL: https://arxiv.org/abs/2504.18851
 
@@ -1220,9 +1220,11 @@ models (9–67% tool-hallucination rates):
   (c) Under-specified query → expect follow-up question (no tool call, asks back)
   (b) Well-specified in-scope query → expect correct tool call
 
-Pre-W1+W2: v1 model fails (d) + (c) by hallucinating tools or auto-filling defaults.
-Post-D5 (v2 model trained with `_UNABLE_TO_ANSWER` + `_FOLLOW_UP_QUESTIONS`):
-expected 3/3 + zero regression on Run-6 8/8.
+Without the When2Call categories in training (v1 corpus): the model fails
+(d) + (c) by hallucinating tools or auto-filling defaults.
+With the When2Call categories trained in (v2 corpus including
+`_UNABLE_TO_ANSWER` + `_FOLLOW_UP_QUESTIONS`): target 3/3 with zero
+regression on the established 8/8 production benchmark baseline.
 """
 
 # === CELL 11b: When2Call probes ================================================
@@ -1258,9 +1260,7 @@ def _run_when2call_probes(model_=None, processor_=None, system_prompt_=None):
     Defaults to the module-level `model`, `processor`, and `SYSTEM_PROMPT`
     so the existing §11b call site works unchanged. The §13a/b/d/e
     variant cells reassign these globals (or pass explicit args) so the
-    same probe set runs against every loaded variant — mirrors OB23's
-    refactor of `_run_benchmark` and `_run_tool_benchmark` to accept the
-    same kwargs.
+    same probe set runs against every loaded variant — mirrors the kwarg refactor applied earlier to `_run_benchmark` and `_run_tool_benchmark`.
     """
     _model = model_ if model_ is not None else model
     _processor = processor_ if processor_ is not None else processor
@@ -1413,7 +1413,7 @@ for E4B (size-ascending), then merged → quantized for A4B:
 2. **E4B BF16 merged** — `Truthseeker87/solarhive-e4b-ollama` (~16 GB safetensors), transformers BF16 load. Lossless-merge regression check vs Variant 1.
 3. **E4B GGUF (Ollama)** — `Truthseeker87/solarhive-e4b-gguf`, runtime via Ollama HTTP API at localhost:11434 (requires `ollama serve` running and the GGUF pulled into Ollama; default-disabled — set `_RUN_E4B_GGUF=True` after setup).
 4. **A4B BF16 merged** — `Truthseeker87/solarhive-26b-a4b-merged` (~48 GB sharded), transformers BF16 load (requires ≥48 GB VRAM).
-5. **A4B NF4 quantized** — `Truthseeker87/solarhive-26b-a4b-nf4` (~48 GB pre-quantized), transformers direct load with no `BitsAndBytesConfig` (per the OB22 quantize notebook Cell 6 verification — pre-quantized weights load directly).
+5. **A4B NF4 quantized** — `Truthseeker87/solarhive-26b-a4b-nf4` (~48 GB pre-quantized), transformers direct load with no `BitsAndBytesConfig` (per quantize notebook verification — pre-quantized weights load directly).
 
 Total expected runtime: ~85-105 min on G4 (was ~75-90 with 4 variants).
 Each variant has its own skip flag (`_RUN_<variant>`) for opting out.
@@ -1737,7 +1737,7 @@ if _RUN_E4B_GGUF:
     # inference). Same WHEN2CALL_PROBES, same matcher logic, same
     # _extract_tool_calls helper as the transformers variants — only the
     # inference backend differs. Mirrors tests/test_ollama_local_e4b_gguf.py
-    # so future Phase L5 local runs are byte-equivalent to this Colab path.
+    # so future local-machine Ollama runs are byte-equivalent to this Colab path.
     print(f"\n--- When2Call Probes on {_src} (Solution B via Ollama HTTP) ---")
     _gguf_w2c_results = []
     for _probe in WHEN2CALL_PROBES:
@@ -1859,14 +1859,14 @@ else:
     print("=" * 60)
     print(f"Variant 5: A4B NF4 quantized — {_src}")
     print("=" * 60)
-    print(f"Loading from {_src} (no BitsAndBytesConfig — pre-quantized weights load directly per OB22 verification)...")
+    print(f"Loading from {_src} (no BitsAndBytesConfig — pre-quantized weights load directly per quantize notebook verification)...")
     # Try Drive cache first; fall back to HF
     _src_path = _DRIVE_A4B_NF4 if _DRIVE_A4B_NF4 else _src
     if _DRIVE_A4B_NF4:
         print(f"Drive cache hit — loading from {_DRIVE_A4B_NF4}")
     # Processor + model from _src_path (Drive cache when available, else
     # HF repo); module-level login() handles auth for the HF path. NF4
-    # weights are pre-quantized — no BitsAndBytesConfig per OB22 Cell 6.
+    # weights are pre-quantized — no BitsAndBytesConfig per quantize notebook verification.
     processor = AutoProcessor.from_pretrained(_src_path, trust_remote_code=True)
     model = AutoModelForCausalLM.from_pretrained(
         _src_path, device_map="cuda:0", trust_remote_code=True,
@@ -1899,7 +1899,7 @@ else:
 
     # When2Call probes — confirms NF4 quantization preserves the same
     # refusal/follow-up behavior as the BF16 baseline (expected 3/3 if
-    # quantization isn't degrading reasoning, per OB22 Cell 6 verification)
+    # quantization isn't degrading reasoning, per quantize notebook verification)
     _w2c = _run_when2call_probes()
     _w2c_correct_v = _print_when2call_results(_w2c, label=_src)
     _VARIANT_W2C_SCORES["a4b_nf4"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
