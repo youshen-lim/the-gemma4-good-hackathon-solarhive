@@ -1252,28 +1252,39 @@ WHEN2CALL_PROBES = [
 ]
 
 
-def _run_when2call_probes():
-    """Run the 3 When2Call probes against the loaded model."""
+def _run_when2call_probes(model_=None, processor_=None, system_prompt_=None):
+    """Run the 3 When2Call probes against the loaded model.
+
+    Defaults to the module-level `model`, `processor`, and `SYSTEM_PROMPT`
+    so the existing §11b call site works unchanged. The §13a/b/d/e
+    variant cells reassign these globals (or pass explicit args) so the
+    same probe set runs against every loaded variant — mirrors OB23's
+    refactor of `_run_benchmark` and `_run_tool_benchmark` to accept the
+    same kwargs.
+    """
+    _model = model_ if model_ is not None else model
+    _processor = processor_ if processor_ is not None else processor
+    _sys = system_prompt_ if system_prompt_ is not None else SYSTEM_PROMPT
     results = []
     for probe in WHEN2CALL_PROBES:
         msgs = [
-            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "system", "content": _sys},
             {"role": "user", "content": probe["question"]},
         ]
-        text = processor.apply_chat_template(
+        text = _processor.apply_chat_template(
             msgs, tools=TOOLS, tokenize=False,
             add_generation_prompt=True, enable_thinking=False,
         )
-        inputs = processor(text=text, return_tensors="pt").to(model.device)
+        inputs = _processor(text=text, return_tensors="pt").to(_model.device)
         with torch.no_grad():
-            out = model.generate(
+            out = _model.generate(
                 **inputs, max_new_tokens=512,
                 temperature=1.0, top_p=0.95, top_k=64,
             )
-        raw = processor.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
-        calls = re.findall(r'call:(\w+)\{([^}]*)\}', raw)
-        called_tools = [c[0] for c in calls] if calls else []
-        parsed = processor.parse_response(raw)
+        raw = _processor.decode(out[0][inputs["input_ids"].shape[1]:], skip_special_tokens=False)
+        # Use shared robust extractor (wrapped + bare-fallback per Google's docs)
+        called_tools = [name for name, _args in _extract_tool_calls(raw)]
+        parsed = _processor.parse_response(raw)
         text_response = (parsed.get("content", "") if isinstance(parsed, dict) else (parsed or ""))
 
         # Tool-call check
@@ -1282,7 +1293,10 @@ def _run_when2call_probes():
         else:
             tool_match = probe["expected_tool"] in called_tools
 
-        # Content check (if specified)
+        # Content check (if specified) — uses inference.py's documented
+        # whitelist (including the (d) matcher permissiveness — see
+        # README §When2Call for the matcher-passes-but-behavior-fails
+        # caveat documented for E4B merged in the 2026-02-05 validation)
         if probe["must_contain_any"] is None:
             content_match = True
         else:
@@ -1302,6 +1316,24 @@ def _run_when2call_probes():
             "rationale": probe["rationale"],
         })
     return results
+
+
+def _print_when2call_results(w2c_results, label=""):
+    """Reusable per-variant printer for When2Call probe results.
+
+    Same output format as the existing §11b call site so per-variant
+    output is consistent. Returns the nominal pass count for caller use."""
+    correct = sum(1 for r in w2c_results if r["passed"])
+    if label:
+        print(f"\n--- When2Call Probes on {label} ---")
+    for r in w2c_results:
+        status = "PASS" if r["passed"] else "FAIL"
+        print(f"  [{status}] {r['category']}")
+        print(f"         Q: {r['question'][:60]}")
+        print(f"         Expected tool: {r['expected_tool'] or 'no tool call'} | Got: {r['called_tools'] or 'no tool call'}")
+        print(f"         Tool match: {r['tool_match']} | Content match: {r['content_match']}")
+    print(f"  When2Call accuracy: {correct}/{len(w2c_results)}")
+    return correct
 
 
 print("\n" + "=" * 60)
@@ -1396,12 +1428,16 @@ print("Multi-Variant Benchmark — preparing")
 print("=" * 60)
 # Record §11's default-flow benchmark (A4B LoRA + base via Unsloth — the
 # implicit baseline) so the §13f summary table can display it alongside
-# the 5 §13 variants. _tool_correct / _tool_total are still in scope from
-# §11. The baseline is keyed under "a4b_lora" but does NOT live in
-# VARIANT_REPOS (which intentionally enumerates only the 5 §13 variants).
+# the 5 §13 variants. _tool_correct / _tool_total / _w2c_correct are
+# still in scope from §11 + §11b. The baseline is keyed under "a4b_lora"
+# but does NOT live in VARIANT_REPOS (which intentionally enumerates only
+# the 5 §13 variants).
 _VARIANT_SCORES = {
     "a4b_lora": (len(BENCHMARK_QS), _tool_correct, _tool_total),
 }  # variant_name -> (qa_total, tool_correct, tool_total)
+_VARIANT_W2C_SCORES = {
+    "a4b_lora": (_w2c_correct, len(WHEN2CALL_PROBES)),
+}  # variant_name -> (passed, total) — When2Call (b)/(c)/(d) probes per Ross et al. 2025
 try:
     del model, processor
 except NameError:
@@ -1501,6 +1537,12 @@ else:
     _VARIANT_SCORES["e4b_lora"] = (len(BENCHMARK_QS), _tc, _tt)
     print(f"\nVariant 1 totals: {len(BENCHMARK_QS)}/{len(BENCHMARK_QS)} Q&A + {_tc}/{_tt} tool = {len(BENCHMARK_QS) + _tc}/{len(BENCHMARK_QS) + _tt}")
 
+    # When2Call probes (b)/(c)/(d) — same harness + matcher as §11b, run
+    # against the variant's reassigned model + processor globals
+    _w2c = _run_when2call_probes()
+    _w2c_correct_v = _print_when2call_results(_w2c, label=_src)
+    _VARIANT_W2C_SCORES["e4b_lora"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
+
     # Cleanup before next variant
     del model, processor
     torch.cuda.empty_cache()
@@ -1556,6 +1598,13 @@ else:
 
     _VARIANT_SCORES["e4b_merged"] = (len(BENCHMARK_QS), _tc, _tt)
     print(f"\nVariant 2 totals: {len(BENCHMARK_QS)}/{len(BENCHMARK_QS)} Q&A + {_tc}/{_tt} tool = {len(BENCHMARK_QS) + _tc}/{len(BENCHMARK_QS) + _tt}")
+
+    # When2Call probes — closes the per-variant gap from the 2026-02-05 run
+    # where this only fired via the side cell after §13b. Now it runs
+    # automatically every multi-variant session.
+    _w2c = _run_when2call_probes()
+    _w2c_correct_v = _print_when2call_results(_w2c, label=_src)
+    _VARIANT_W2C_SCORES["e4b_merged"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
 
     # Cleanup before next variant
     del model, processor
@@ -1682,6 +1731,57 @@ if _RUN_E4B_GGUF:
 
     _VARIANT_SCORES["e4b_gguf"] = (len(BENCHMARK_QS), _tc, _tt)
     print(f"\nVariant 3 totals: {len(BENCHMARK_QS)}/{len(BENCHMARK_QS)} Q&A + {_tc}/{_tt} tool = {len(BENCHMARK_QS) + _tc}/{len(BENCHMARK_QS) + _tt}")
+
+    # When2Call probes via Solution B (no transformers `model.generate()` —
+    # use _gguf_processor for prompt rendering + _ollama_generate_raw for
+    # inference). Same WHEN2CALL_PROBES, same matcher logic, same
+    # _extract_tool_calls helper as the transformers variants — only the
+    # inference backend differs. Mirrors tests/test_ollama_local_e4b_gguf.py
+    # so future Phase L5 local runs are byte-equivalent to this Colab path.
+    print(f"\n--- When2Call Probes on {_src} (Solution B via Ollama HTTP) ---")
+    _gguf_w2c_results = []
+    for _probe in WHEN2CALL_PROBES:
+        _msgs = [
+            {"role": "system", "content": SYSTEM_PROMPT},
+            {"role": "user", "content": _probe["question"]},
+        ]
+        _prompt = _gguf_processor.apply_chat_template(
+            _msgs, tools=TOOLS, tokenize=False,
+            add_generation_prompt=True, enable_thinking=False,
+        )
+        _raw = _ollama_generate_raw(_prompt)
+        _called = [name for name, _args in _extract_tool_calls(_raw)]
+        # Same content matcher as §11b — including the documented (d)
+        # whitelist permissiveness, so direct comparison with the
+        # transformers-variant When2Call scores is honest.
+        _text = re.sub(r"<\|channel>.*?<channel\|>", "", _raw, flags=re.DOTALL)
+        _text = re.sub(r"<\|tool_call>.*?<tool_call\|>", "", _text, flags=re.DOTALL)
+        _text = re.sub(r"<[^>]+\|>|<\|[^>]+>", "", _text).strip()
+
+        if _probe["expected_tool"] is None:
+            _tool_match = (len(_called) == 0)
+        else:
+            _tool_match = _probe["expected_tool"] in _called
+        if _probe["must_contain_any"] is None:
+            _content_match = True
+        else:
+            _text_lower = _text.lower()
+            _content_match = any(kw.lower() in _text_lower for kw in _probe["must_contain_any"])
+        _passed = _tool_match and _content_match
+        _gguf_w2c_results.append({
+            "category": _probe["category"],
+            "question": _probe["question"],
+            "expected_tool": _probe["expected_tool"],
+            "called_tools": _called,
+            "response": _text,
+            "tool_match": _tool_match,
+            "content_match": _content_match,
+            "passed": _passed,
+            "rationale": _probe["rationale"],
+        })
+    _w2c_correct_v = _print_when2call_results(_gguf_w2c_results, label=_src)
+    _VARIANT_W2C_SCORES["e4b_gguf"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
+
     # Note: `_gguf_processor` is intentionally kept alive — §13g (the
     # end-to-end agentic-loop probe) reuses it for prompt rendering. §13g
     # frees it at its end. The processor is only ~MB so coexisting with
@@ -1738,6 +1838,13 @@ else:
         _VARIANT_SCORES["a4b_merged"] = (len(BENCHMARK_QS), _tc, _tt)
         print(f"\nVariant 4 totals: {len(BENCHMARK_QS)}/{len(BENCHMARK_QS)} Q&A + {_tc}/{_tt} tool = {len(BENCHMARK_QS) + _tc}/{len(BENCHMARK_QS) + _tt}")
 
+        # When2Call probes — same as A4B LoRA fine-tune; expect 3/3 if
+        # the merge step is lossless (per 2026-02-05 outputs textually
+        # matching A4B LoRA baseline)
+        _w2c = _run_when2call_probes()
+        _w2c_correct_v = _print_when2call_results(_w2c, label=_src)
+        _VARIANT_W2C_SCORES["a4b_merged"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
+
         del model, processor
         torch.cuda.empty_cache()
         _gc.collect()
@@ -1790,6 +1897,13 @@ else:
     _VARIANT_SCORES["a4b_nf4"] = (len(BENCHMARK_QS), _tc, _tt)
     print(f"\nVariant 5 totals: {len(BENCHMARK_QS)}/{len(BENCHMARK_QS)} Q&A + {_tc}/{_tt} tool = {len(BENCHMARK_QS) + _tc}/{len(BENCHMARK_QS) + _tt}")
 
+    # When2Call probes — confirms NF4 quantization preserves the same
+    # refusal/follow-up behavior as the BF16 baseline (expected 3/3 if
+    # quantization isn't degrading reasoning, per OB22 Cell 6 verification)
+    _w2c = _run_when2call_probes()
+    _w2c_correct_v = _print_when2call_results(_w2c, label=_src)
+    _VARIANT_W2C_SCORES["a4b_nf4"] = (_w2c_correct_v, len(WHEN2CALL_PROBES))
+
     del model, processor
     torch.cuda.empty_cache()
     _gc.collect()
@@ -1802,31 +1916,41 @@ Side-by-side scores across the 5 v2 weight variants.
 print("=" * 60)
 print("Multi-Variant Benchmark Summary")
 print("=" * 60)
-print(f"{'Variant':<22} {'Repo':<45} {'Q&A':<6} {'Tool':<8} {'Total':<8}")
-print("-" * 95)
+print(f"{'Variant':<22} {'Repo':<45} {'Q&A':<6} {'Tool':<8} {'W2C':<6} {'Total':<8}")
+print("-" * 105)
 _TOTAL_QA = len(BENCHMARK_QS)
 _TOTAL_TOOL = len(TOOL_BENCHMARK_QS)
+_TOTAL_W2C = len(WHEN2CALL_PROBES)
 
-# Default-flow baseline (§11 — A4B LoRA + base via Unsloth, loaded in Cell 2b).
+
+def _fmt_w2c(name):
+    """Render the per-variant When2Call cell as 'X/3' or '-' if not measured."""
+    if name in _VARIANT_W2C_SCORES:
+        passed, total = _VARIANT_W2C_SCORES[name]
+        return f"{passed}/{total}"
+    return "-"
+
+
+# Default-flow baseline (§11 + §11b — A4B LoRA + base via Unsloth, loaded in Cell 2b).
 # Implicit baseline; not duplicated as a §13 variant. Print first so the
 # 5 §13 variants below have a reference point.
 if "a4b_lora" in _VARIANT_SCORES:
     qa_total, tc, tt = _VARIANT_SCORES["a4b_lora"]
     total = qa_total + tc
-    print(f"{'a4b_lora (baseline)':<22} {'Truthseeker87/solarhive-26b-a4b-lora':<45} {qa_total}/{_TOTAL_QA:<4} {tc}/{tt:<6} {total}/{qa_total + tt}")
-    print("-" * 95)
+    print(f"{'a4b_lora (baseline)':<22} {'Truthseeker87/solarhive-26b-a4b-lora':<45} {qa_total}/{_TOTAL_QA:<4} {tc}/{tt:<6} {_fmt_w2c('a4b_lora'):<6} {total}/{qa_total + tt}")
+    print("-" * 105)
 
 for name, repo in VARIANT_REPOS.items():
     if name in _VARIANT_SCORES:
         qa_total, tc, tt = _VARIANT_SCORES[name]
         total = qa_total + tc
-        print(f"{name:<22} {repo:<45} {qa_total}/{_TOTAL_QA:<4} {tc}/{tt:<6} {total}/{qa_total + tt}")
+        print(f"{name:<22} {repo:<45} {qa_total}/{_TOTAL_QA:<4} {tc}/{tt:<6} {_fmt_w2c(name):<6} {total}/{qa_total + tt}")
     else:
-        print(f"{name:<22} {repo:<45} {'(skipped)':<6} {'(skipped)':<8} {'(skipped)':<8}")
+        print(f"{name:<22} {repo:<45} {'(skipped)':<6} {'(skipped)':<8} {'-':<6} {'(skipped)':<8}")
 print()
-print(f"Benchmark questions: {_TOTAL_QA} Q&A + {_TOTAL_TOOL} tool-calling = {_TOTAL_QA + _TOTAL_TOOL} total")
-print(f"Note: Q&A scores reflect generation completeness ({_TOTAL_QA}/{_TOTAL_QA} when all answers are substantive); tool scores are programmatic via _score_tool_results() lenient ≥min_calls rule.")
-print(f"All 6 rows (a4b_lora baseline + 5 §13 variants) use byte-identical apply_chat_template prompts + same SYSTEM_PROMPT + same TOOLS schemas + same scoring helper.")
+print(f"Benchmark questions: {_TOTAL_QA} Q&A + {_TOTAL_TOOL} tool-calling = {_TOTAL_QA + _TOTAL_TOOL} total + {_TOTAL_W2C} When2Call probes (Ross et al. 2025, arXiv:2504.18851)")
+print(f"Note: Q&A scores reflect generation completeness ({_TOTAL_QA}/{_TOTAL_QA} when all answers are substantive); tool + W2C scores are programmatic.")
+print(f"All 6 rows (a4b_lora baseline + 5 §13 variants) use byte-identical apply_chat_template prompts + same SYSTEM_PROMPT + same TOOLS schemas + same scoring helpers + same When2Call matcher (including documented (d) whitelist permissiveness for honest A4B vs E4B comparison).")
 print("\n✅ Multi-variant benchmark complete")
 
 """## 13g: GGUF Agentic Loop Probe — End-to-End Demo via Ollama
