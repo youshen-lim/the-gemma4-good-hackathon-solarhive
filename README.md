@@ -235,20 +235,21 @@ Tools are passed via `apply_chat_template(tools=[...])` and the model
 autonomously decides which tools to invoke using Gemma 4's dedicated
 control tokens (`<|tool_call>` and `<|tool_response>`).
 
-**Four tools Gemma 4 can invoke autonomously:**
+**Five tools Gemma 4 can invoke autonomously — all three keyed APIs (OWM, EIA, NREL) actively wired:**
 
 | Tool | API | Returns |
 |------|-----|---------|
-| `get_weather(location)` | OpenWeatherMap | Temperature, clouds %, wind, humidity, sunrise/sunset |
-| `get_solar_production(clouds_pct, temp_f)` | Open-Meteo GHI | Production kW, efficiency %, GHI W/m², temp derating |
-| `get_battery_state()` | Community BMS | State of charge, capacity, charging status |
-| `get_grid_status()` | EIA Open Data | Pricing period, rate/kWh, renewable %, CO2 intensity |
+| `get_weather(location)` | OpenWeatherMap (`OWM_API_KEY`) | Temperature, clouds %, wind, humidity, sunrise/sunset |
+| `get_solar_production(clouds_pct, temp_f)` | Open-Meteo GHI (keyless) | Production kW, efficiency %, GHI W/m², temp derating |
+| `get_battery_state()` | Community BMS (simulator) | State of charge, capacity, charging status |
+| `get_grid_status()` | EIA Open Data (`EIA_API_KEY`) | Pricing period, rate/kWh, renewable %, CO2 intensity |
+| `get_nrel_pvwatts_baseline()` | NREL PVWatts v8 (`NREL_API_KEY`) | Annual + current-month typical kWh + avg kW for the 72 kW array |
 
 **The four-stage agentic loop:**
 
 ```
 Stage 1 — Tool Definition
-  Four tools passed to Gemma 4 via apply_chat_template(tools=[...])
+  Five tools passed to Gemma 4 via apply_chat_template(tools=[...])
   with typed Python signatures and Google-style docstrings.
   Gemma 4's chat template automatically generates the tool schema.
           ↓
@@ -258,20 +259,29 @@ Stage 2 — Model Decides
           ↓
 Stage 3 — Developer Executes
   Code intercepts each tool_call via regex parsing (call:fn_name{args}),
-  executes the real API request (OpenWeatherMap, Open-Meteo, EIA),
-  feeds results back as {"role": "tool", "name": ..., "content": ...}
-  messages, and loops up to 3 rounds.
+  executes the real API request (OpenWeatherMap, Open-Meteo, EIA, NREL
+  PVWatts), and feeds results back as a TWO-message sequence:
+      {"role": "assistant", "tool_calls": [{"function": {...}}, ...]}
+      {"role": "tool", "name": "<fn>", "content": "<JSON string>"}
+  Loops up to 3 rounds. This 2-message format is byte-identical to what
+  solarhive_datagen.py emits and solarhive_finetune.py trains on, so the
+  inference path matches the training distribution exactly.
           ↓
 Stage 4 — Model Responds
   Gemma 4 reads the tool results and synthesizes a final,
   grounded recommendation based on actual live data.
 ```
 
+> **Training/inference alignment:** the 2-message `{role:assistant, tool_calls:...}` + `{role:tool, name, content}` format is shared across `solarhive_datagen.py` (training-data generation), `solarhive_finetune.py` (SFT preprocessing + schema validation), `solarhive_inference.py` Cell 4 `generate_with_tools()` (transformers agentic loop), `solarhive_inference.py` §13g (Ollama agentic loop), and `test_ollama_tools.py` Solution B `build_gemma4_prompt()` (GGUF deployment). This differs from Google's vanilla function-calling docs (which use a single message with `tool_calls` + `tool_responses` keys) — we use the 2-message form because that's what the model was fine-tuned on; switching would mismatch the training distribution.
+
 **Why this matters — selective tool reasoning:**
 
 ```
 "What time does peak pricing start?"
 → Model calls: get_grid_status() only
+
+"Is today's production above typical for January?"
+→ Model calls: get_solar_production() + get_nrel_pvwatts_baseline()
 
 "Should I run my pool heater now?"
 → Model calls: get_weather() + get_solar_production()
@@ -281,6 +291,28 @@ Stage 4 — Model Responds
 The model decides which tools are relevant based on the question —
 not blindly fetching everything. This demonstrates genuine agentic
 reasoning.
+
+**Inference-time When2Call validation (`solarhive_inference.py` §11b — `WHEN2CALL_PROBES`).**
+Three held-out probes added per `when2call_plan.md` Task W6 validate
+coverage of 3 of the 4 failure-mode categories from
+[Ross, H., Mahabaleshwarkar, A. S., & Suhara, Y. (2025).
+*When2Call: When (not) to Call Tools.* arXiv:2504.18851](https://arxiv.org/abs/2504.18851).
+The paper documents 9–67% tool-hallucination rates in untrained
+community models on the (c) and (d) categories below — failure modes
+public tool-calling datasets often miss because they lack follow-up
+and unable-to-answer examples.
+
+| Category | Probe                                              | Expected behavior                                                |
+|---------:|----------------------------------------------------|------------------------------------------------------------------|
+| **(b)**  | "What's the current grid rate?"                    | Correct tool call (`get_grid_status`) — well-specified, in-scope |
+| **(c)**  | "How much will a 10 kW array produce today?"       | Follow-up question (asks for location) — does NOT auto-fill Ann Arbor |
+| **(d)**  | "What's the current air quality index in Ann Arbor?" | Polite refusal + redirect (e.g., airnow.gov) — does NOT hallucinate an `get_aqi` tool |
+
+Pre-W1+W2 (v1 model): fails (c) + (d) by hallucinating tools or
+auto-filling defaults. Post-D5 (v2 model trained with
+`_UNABLE_TO_ANSWER` + `_FOLLOW_UP_QUESTIONS` corpus categories from
+[`solarhive_datagen.py`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal)):
+target 3/3 with zero regression on the Run-6 8/8 baseline.
 
 **Example grounded response:**
 
@@ -301,7 +333,7 @@ result = solarhive_agent(
     question="How will this sky affect our production? Should I charge my EV now?",
     image=sky_photo   # Gemma 4 processes image AND calls tools in one turn
 )
-# → tool_calls: [get_weather, get_solar_production, get_battery_state, get_grid_status]
+# → tool_calls: [get_weather, get_solar_production, get_battery_state, get_grid_status, get_nrel_pvwatts_baseline]
 # → response: grounded answer citing both visual observation and live API data
 ```
 
@@ -317,7 +349,7 @@ strategy — one for cloud inference, one for edge deployment:
 |-------|------------------------|--------------|---------------|---------|------------|-----------|
 | E2B | 5.1B / 2.3B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio, Video | **Ollama serving target** — lightest, runs on laptop CPU, 34 quantized variants |
 | E4B | 8B / 4.5B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio, Video | **Fine-tuned for edge** — Any-to-Any multimodal, fits T4 in 4-bit (~12 GB) |
-| 26B A4B | 25.2B / 3.8B active | MoE (8/128) | ~550M | 256K | Text, Image | **Fine-tuned for cloud** — best domain absorption (0.675 loss), 256K context |
+| 26B A4B | 25.2B / 3.8B active | MoE (8/128) | ~550M | 256K | Text, Image | **Fine-tuned for cloud** — best domain absorption (0.6956 loss), 256K context |
 | 31B | 30.7B / 30.7B | Dense | ~550M | 256K | Text, Image | **Rejected** — only 2–3% better than 26B A4B, 2–4x slower, tighter GPU fit |
 
 *Source: [Gemma 4 Model Card](https://ai.google.dev/gemma/docs/core/model_card_4). All four models support native function calling and agentic workflows.*
@@ -357,7 +389,7 @@ deployment with future voice interaction.
   at a fraction of the compute. 256K context window accommodates
   multi-round agentic tool-calling loops where the model chains 4 API
   calls per turn. Absorbs domain knowledge most effectively (converged
-  loss 0.675 vs E4B's 0.952). Fits A100-40GB in NF4 (~16 GB) or runs
+  loss 0.6956 vs E4B's 0.9218). Fits A100-40GB in NF4 (~16 GB) or runs
   BF16 on 96 GB GPUs.
 
 - **E4B for fine-tuning (edge path):** Compact dense model with
@@ -366,7 +398,7 @@ deployment with future voice interaction.
   for community members querying energy status from mobile devices
   (CoVoST 35.54 — unavailable on 26B A4B/31B). All Gemma 4 models
   share the same native function-calling protocol, so E4B retains full
-  tool-use capability at the edge. Trains in just 282s on RTX PRO 6000.
+  tool-use capability at the edge. Trains in just 420s on RTX PRO 6000.
   LoRA adapters merge to safetensors for Ollama.
 
 - **E2B for Ollama serving (not E4B):** At 2.3B effective parameters,
@@ -388,8 +420,8 @@ training corpus, targeting both cloud and edge deployment:
 
 | Model | Role | Training | Export |
 |-------|------|----------|--------|
-| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | LoRA r=16, BF16, 4,393s | LoRA adapters |
-| Gemma 4 E4B (8B) | Edge deployment via Ollama | LoRA r=16, BF16, 282s | LoRA → Ollama |
+| Gemma 4 26B A4B (MoE) | Cloud inference + VQA demo | LoRA r=16, BF16, 7,198s | LoRA adapters |
+| Gemma 4 E4B (8B) | Edge deployment via Ollama | LoRA r=16, BF16, 420s | LoRA → Ollama |
 
 **Training data:** [`solarhive-community-solar-multimodal`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) — **1,727 rows** (1,713 text + 14 image-grounded), ~347K tokens. Composition:
 
@@ -423,8 +455,8 @@ by free GPU VRAM at runtime.
 
 | Model | Converged Loss | Trainable Params | Isolated Benchmark | Production Benchmark (agentic) | Time |
 |-------|---------------|-----------------|-------------------|-------------------------------|------|
-| Gemma 4 26B A4B | **0.675** | 505.4M / 26.3B (1.92%) | 6/8 (5/5 Q&A, 1/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 4,393s |
-| Gemma 4 E4B | **0.952** | 41.2M / 8.0B (0.51%) | 7/8 (5/5 Q&A, 2/3 tool) | — | 282s |
+| Gemma 4 26B A4B | **0.6956** | 505.4M / 26.3B (1.92%) | **8/8** (5/5 Q&A, 3/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 7,198s |
+| Gemma 4 E4B | **0.9218** | 41.2M / 8.0B (0.51%) | **8/8** (5/5 Q&A, 3/3 tool) | — | 420s |
 
 **Fine-tuning is text-only on the multimodal-capable corpus** — image
 rows in the dataset are skipped at the data-prep layer. VQA at
@@ -440,6 +472,39 @@ text-focused fine-tuning.
 run in the full agentic loop with tool definitions passed via
 `apply_chat_template(tools=[...])`. The 26B A4B reliably calls tools
 when given the function signatures it was trained on.*
+
+**Precision pipeline — BF16 is Gemma 4's native release format.** Google
+publishes the open-source [Gemma 4 base](https://huggingface.co/google/gemma-4-26b-a4b-it)
+in BF16; there is no FP32 release to begin with. Our LoRA fine-tuning
+runs at BF16 over that BF16 base, and Unsloth's `save_pretrained_merged(method="merged_16bit")`
+folds the LoRA delta into the base weights at the same BF16 precision.
+The NF4 step is therefore the **only** quantization in the entire
+SolarHive 26B A4B pipeline:
+
+```
+Google's open-source Gemma 4 26B A4B base (BF16, native release precision)
+  ↓ LoRA fine-tuning at BF16
+solarhive-26b-a4b-lora (BF16 adapter delta, ~2 GB)
+  ↓ merge_16bit
+solarhive-26b-a4b-merged (BF16 full weights, ~48 GB — same precision as base)
+  ↓ BitsAndBytesConfig(load_in_4bit=True, nf4)  ← only quantization step
+solarhive-26b-a4b-nf4 (partial NF4 + BF16 hybrid, ~48 GB)
+```
+
+**Quantization quality preserved at deployment.** The 26B A4B was
+re-merged from the published LoRA + base model and NF4-quantized via
+`BitsAndBytesConfig` for HF Spaces deployment. The NF4 quantized
+variant ([`solarhive-26b-a4b-nf4`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-nf4))
+scores **8/8** on the same 5 Q&A + 3 tool-calling held-out set —
+matching the BF16 merged baseline exactly. The six model repos
+(`solarhive-26b-a4b-{lora,merged,nf4}`,
+`solarhive-e4b-{lora,ollama,gguf}`) all carry consistent v2 weights and
+v2-aligned model cards. The `-e4b-lora` repo was added separately to
+expose the E4B LoRA delta as a standalone artifact (it had previously
+only existed as a Drive backup; the merge → safetensors push from the
+fine-tuning notebook was the only HF artifact for the E4B family until
+that step). It bootstraps the `solarhive_merge_e4b.ipynb` recipe so
+that notebook is now runnable on a fresh Colab session.
 
 ### Edge GGUF deployment — both Q4_K_M variants score 10/10 on a 16 GB laptop
 
@@ -504,7 +569,7 @@ Three Colab Notebooks — the complete pipeline:
 solarhive_datagen.py     Data generation: 4 live APIs → 551 training examples
         ↓                + 14 diagnostic charts
 solarhive_finetune.py    Dual LoRA fine-tuning via Unsloth
-        ↓                E4B (282s) + 26B A4B (4,393s)
+        ↓                E4B (420s) + 26B A4B (7,198s)
 solarhive_inference.py   Live demo: fine-tuned 26B A4B + 4 API tools
                          + 3 VQA modes + agentic loop + benchmarks
 
@@ -704,13 +769,102 @@ geographic patterns, and cross-validate between independent sources.
 
 1. Open `solarhive_inference.ipynb` in Google Colab
 2. Runtime → Change runtime type → GPU (A100 or RTX PRO 6000 recommended)
-3. Secrets: add `OWM_API_KEY`, `EIA_API_KEY`
+3. Secrets: add `OWM_API_KEY`, `EIA_API_KEY`, `HF_TOKEN` (HF token required: weights are private until submission day)
 4. Mount Google Drive (for LoRA adapter cache)
 5. Run cells sequentially
 
 > **Note:** Gemma 4 26B A4B requires ~48 GB VRAM in BF16 or ~16 GB in
 > 4-bit NF4. T4 x2 (32 GB) cannot run this model — BitsAndBytes NF4
 > is incompatible with CPU offloading.
+
+### Multi-Variant Inference Benchmark
+
+`solarhive_inference.py` / `.ipynb` §13 loads each of the 5 published v2 weight
+artifacts in turn (with VRAM cleanup between variants) and runs the same
+10-question benchmark (5 Q&A + 5 tool-calling) against each. A single Colab Pro
+G4 VM (96 GB VRAM) can run all five in one ~85–105 min session. Each variant
+has a `_RUN_<variant>` skip flag so you can opt out of slow ones.
+
+| # | Variant | HF repo | Loader | Format on disk | Size |
+|---|---------|---------|--------|----------------|-----:|
+| 1 | **E4B LoRA + base** | [`solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | Unsloth `FastVisionModel` (BF16) | LoRA adapters over kagglehub-cached base | ~200 MB |
+| 2 | **E4B merged** | [`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | transformers BF16 | LoRA-merged BF16 safetensors, single file | ~16 GB |
+| 3 | **E4B GGUF** (Ollama) | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | Ollama HTTP `/api/generate` (raw mode) | Q4_K_M GGUF | ~5 GB |
+| 4 | **A4B merged** | [`solarhive-26b-a4b-merged`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | transformers BF16 | LoRA-merged BF16 safetensors, sharded into 2 files (49.9 + 1.7 GB + `model.safetensors.index.json`) | ~52 GB |
+| 5 | **A4B NF4** | [`solarhive-26b-a4b-nf4`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-nf4) | transformers direct load (no `BitsAndBytesConfig`) | NF4 pre-quantized safetensors, single file | ~48 GB |
+
+> **"Merged" vs "sharded":** orthogonal concepts. *Merged* = the LoRA delta is
+> fused into the base weights (vs. kept as a separate adapter applied at load
+> time). *Sharded* = the safetensors file is split across multiple parts
+> because it exceeds HF's default ~5 GB shard size. Both `solarhive-e4b-ollama`
+> and `solarhive-26b-a4b-merged` are LoRA-merged in the same sense; only the
+> A4B (~52 GB) is large enough to be sharded. `from_pretrained` handles the
+> shard index transparently — sharding is invisible to inference code.
+
+A4B LoRA + base ([`solarhive-26b-a4b-lora`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora))
+is the default load in Cell 2b and is benchmarked by §11; it is therefore
+not duplicated as a §13 variant. Drive caches (`/content/drive/MyDrive/models/`)
+are checked before HF for every variant — re-runs in the same Colab session
+skip ~70 GB of HF downloads.
+
+#### Multi-Variant Deployment Validation (2026-02-05)
+
+End-to-end inference run on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell, 96 GB VRAM).
+All four loaded transformers variants score 9-10/10 on the 10-question parity
+benchmark; the E4B GGUF variant was deferred because Ollama is not pre-installed
+in Colab (separate local-machine validation plan documented in `inference_v2_plan.md`).
+Sampling defaults: `temperature=1.0, top_p=0.95, top_k=64` —
+[Unsloth-recommended](https://unsloth.ai/docs/models/gemma-4) Gemma 4 values.
+
+| # | Variant | Q&A | Tool | Total | Notes |
+|---|---------|:-:|:-:|:-:|---|
+| — | A4B LoRA + base (default Cell 2b load) | 5/5 | 4/5 | **9/10** | TQ5 multi-call: no tool fired |
+| 1 | E4B LoRA + base | 5/5 | **5/5** | **10/10** | **Sole TQ5 winner** — chained 3 `get_weather` calls across Ann Arbor, Phoenix, Seattle |
+| 2 | E4B merged | 5/5 | 4/5 | **9/10** | TQ5: only 1 `get_weather` call (needs ≥2) |
+| 3 | E4B GGUF | — | — | (deferred) | No Ollama in Colab — separate local-machine validation plan |
+| 4 | A4B merged | 5/5 | 4/5 | **9/10** | TQ5: no tool fired |
+| 5 | A4B NF4 | 5/5 | 4/5 | **9/10** | TQ5: no tool fired — matches BF16 baseline; quantization not measurably degrading |
+
+The TQ5 multi-call probe (*"Compare today's irradiance forecast across Ann Arbor, Phoenix, Seattle"*) uses lenient scoring (`min_calls=2`) yet fails on 4 of 5 variants. Only E4B LoRA chained the multi-city tool calls. This is consistent with the model selecting a single grounded answer ("forecasts vary by location") rather than chaining lookups — defensible behavior, but the lenient multi-call probe surfaces a real edge case for the multi-step routing story. Worth a multi-trial re-run to characterize whether this is stochastic (temperature=1.0) or systematic.
+
+#### Inference-time When2Call Validation — A4B vs E4B
+
+Cell 11b runs three held-out probes per [Ross et al. 2025, *When2Call*, arXiv:2504.18851](https://arxiv.org/abs/2504.18851) against the A4B LoRA (Cell 2b default load); a side experiment after §13b runs the same probes against E4B merged. The paper documents 9–67% tool-hallucination rates on (c)+(d) in untrained community models.
+
+| Probe | A4B LoRA | E4B merged | Notes |
+|---|:-:|:-:|---|
+| **(b)** *"current grid rate?"* — well-specified routing | ✅ | ✅ | Both correctly call `get_grid_status` |
+| **(c)** *"How much will a 10 kW array produce today?"* — ask follow-up | ✅ | ❌ | E4B auto-fills location and calls `get_solar_production` instead of asking back |
+| **(d)** *"current AQI in Ann Arbor?"* — refuse + redirect | ✅ | ⚠️ matcher pass / behavior fail | A4B explicitly disclaims (*"I don't have a dedicated air quality tool…"*); E4B **fabricates a number** (*"Air quality index: 38"*) but the matcher passes because the response contains the word "air quality". True behavior is a hallucination. |
+| **Nominal score** | **3/3** | **2/3** | — |
+| **Behavioral score (strict)** | **3/3** | **1/3** | The (d) matcher whitelist is too permissive; only the (b) probe is genuinely uncontroversial for E4B. |
+
+**Honest finding for deployment:** E4B regresses on (c) and (d) compared to A4B. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily hallucinate plausible-sounding data when they should disclaim. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future v3 fine-tune could increase E4B's `_FOLLOW_UP_QUESTIONS` example count (currently 6) and `_UNABLE_TO_ANSWER` count (currently 10) to close the gap.
+
+#### Hypothesis: A4B was expected to outperform smaller variants on reasoning-heavy probes
+
+The A4B-outperforms-E4B outcome on the When2Call (c)+(d) probes was the **expected hypothesis going in**, not a surprise discovery. Two independent sources predict it:
+
+1. **Google's own Gemma 4 documentation** — from the [official Gemma 4 Core docs](https://ai.google.dev/gemma/docs/core) under *"Parameter sizes and quantization"*:
+
+   > *"Gemma 4 models are available in 4 parameter sizes: E2B, E4B, 31B and 26B A4B. The models can be used with their default precision (16-bit) or with a lower precision using quantization. The different sizes and precisions represent a set of trade-offs for your AI application. **Models with higher parameters and bit counts (higher precision) are generally more capable, but are more expensive to run** in terms of processing cycles, memory cost and power consumption. Models with lower parameters and bit counts (lower precision) have less capabilities, but may be sufficient for your AI task."*
+
+2. **The When2Call paper** (Ross et al. 2025) documents the same size-vs-refusal scaling pattern empirically across community models — smaller models with less reasoning depth more readily hallucinate plausible-sounding data on under-specified or out-of-scope queries.
+
+Per the [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4), the four BF16-native release variants differ in capacity by an order of magnitude:
+
+| Variant | Total params | Active / effective per token | Architecture | Vision encoder |
+|---|---:|---:|---|---:|
+| **E2B** | 5.1B | 2.3B effective (PLE) | Dense + PLE | ~75M |
+| **E4B** | 8B | 4.5B effective (PLE) | Dense + PLE | ~150M |
+| **26B A4B** (chosen for SolarHive cloud) | 25.2B | 3.8B active (8/128 + 1 shared experts) | MoE | **~550M** |
+| **31B** | 30.7B | 30.7B | Dense | ~550M |
+
+The 26B A4B picked for the SolarHive cloud demo activates only **3.8B parameters per token** at inference (MoE sparsity, comparable runtime cost to E4B's 4.5B effective) but accesses ~25B total knowledge capacity and a **3.7× larger vision encoder** than E4B. SolarHive's hypothesis going into the (2026-02-05) validation: on reasoning-heavy probes — When2Call (c) follow-up questioning, (d) refusal-vs-fabrication — A4B would outperform E4B because the official docs explicitly describe parameter count as the capability dimension, AND the paper documents exactly this scaling pattern. The validation confirms the prediction; the same v2 fine-tune applied to both produces 3/3 on A4B and 1/3 strict on E4B.
+
+**The takeaway is not "E4B is broken" — it is "the documented Gemma 4 capacity scaling translates predictably into refusal/follow-up behavior at our specific task, validating our hypothesis-driven model selection."** Architecture-aware deployment routing matches query difficulty to model capacity: well-specified queries hit E4B at the edge, under-specified or out-of-scope queries escalate to A4B in the cloud. Same fine-tune across both — the routing is what changes.
+
+**Defensive dispatch confirmed working in production:** the validation run executed without `TypeError` from hallucinated tool kwargs (the `_safe_tool_call` defensive dispatcher in Cell 3 filters argument lists against each function's signature) or `KeyError` from pure-tool model responses (the `parsed.get("content", "")` pattern at all four `parse_response()` callsites returns the empty string when the response is tool-only). Both safety nets are pinned in the `tests/test_inference_script.py` regression harness (24 dedicated tests across TestSafeToolCallDispatch, TestParseResponseContentSafety, and TestRealisticAgenticDispatch).
 
 ### API Keys Required (all free tier)
 
@@ -959,6 +1113,7 @@ community-level optimization.
 | **26B A4B LoRA** | [solarhive-26b-a4b-lora](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) | Cloud LoRA adapters via Unsloth (Unsloth track) |
 | **26B A4B NF4** | [solarhive-26b-a4b-nf4](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-nf4) | Pre-quantized 4-bit cloud model for HF Spaces / 24 GB+ GPUs |
 | **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Full BF16 merged cloud model |
+| **E4B LoRA** | [solarhive-e4b-lora](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | E4B adapter weights (~200 MB) — apply over base via Unsloth |
 | **E4B safetensors** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge model — merged safetensors source for transformers / GGUF conversion via llama.cpp |
 | **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment** — Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. **10/10 benchmark**. (Ollama + llama.cpp tracks) |
 | **Dataset** | [solarhive-community-solar-multimodal](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) | 1,727 training examples (1,713 text + 14 image-grounded) |
