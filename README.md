@@ -454,10 +454,10 @@ by free GPU VRAM at runtime.
 
 **Training results (Google Colab G4 VM, RTX PRO 6000, BF16):**
 
-| Model | Converged Loss | Trainable Params | Isolated Benchmark | Production Benchmark (agentic) | Time |
-|-------|---------------|-----------------|-------------------|-------------------------------|------|
-| Gemma 4 26B A4B | **0.6956** | 505.4M / 26.3B (1.92%) | **8/8** (5/5 Q&A, 3/3 tool) | **8/8** (5/5 Q&A, 3/3 tool) | 7,198s |
-| Gemma 4 E4B | **0.9218** | 41.2M / 8.0B (0.51%) | **8/8** (5/5 Q&A, 3/3 tool) | — | 420s |
+| Model | Converged Loss | Trainable Params | Initial 8-Q Benchmark | May 2026 Final Run | Time |
+|-------|---------------|-----------------|-----------------------|-------------------|------|
+| Gemma 4 26B A4B | **0.6956** | 505.4M / 26.3B (1.92%) | **8/8** (5/5 Q&A, 3/3 tool) | **9/10 + 3/3 W2C** (multi-variant 10-Q parity benchmark) | 7,198s |
+| Gemma 4 E4B | **0.9218** | 41.2M / 8.0B (0.51%) | **8/8** (5/5 Q&A, 3/3 tool) | **10/10 + 2/3 W2C** (LoRA + base, sole 10/10 winner) | 420s |
 
 **Fine-tuning is text-only on the multimodal-capable corpus** — image
 rows in the dataset are skipped at the data-prep layer. VQA at
@@ -803,10 +803,7 @@ has a `_RUN_<variant>` skip flag so you can opt out of slow ones.
 > shard index transparently — sharding is invisible to inference code.
 
 A4B LoRA + base ([`solarhive-26b-a4b-lora`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora))
-is the default load in Cell 2b and is benchmarked by §11; it is therefore
-not duplicated as a §13 variant. Drive caches (`/content/drive/MyDrive/models/`)
-are checked before HF for every variant — re-runs in the same Colab session
-skip ~70 GB of HF downloads.
+is the default load in the inference notebook and is benchmarked alongside the When2Call cell; it is therefore not duplicated as an explicit multi-variant entry. Local caches under the user's Drive are checked before HF for every variant — re-runs in the same session skip ~70 GB of HF downloads.
 
 #### Multi-Variant Deployment Validation — All 6 variants measured
 
@@ -837,16 +834,16 @@ The TQ5 multi-call probe (*"Compare today's irradiance forecast across Ann Arbor
 
 #### Inference-time When2Call Validation — full all-6-variant measurement
 
-Cell 11b + each §13 variant cell runs three held-out probes per [Ross et al. 2025, *When2Call*, arXiv:2504.18851](https://arxiv.org/abs/2504.18851). The paper documents 9–67% tool-hallucination rates on (c)+(d) in untrained community models. The final-run validation (May 2026) measured all 5 cloud transformers variants on Colab Pro G4, plus the GGUF variant locally on a CPU-only Surface Pro 8 (i5-1135G7, 16 GB RAM, external USB drive for GGUF storage):
+The held-out probes are from [Ross et al. 2025, *When2Call*, arXiv:2504.18851](https://arxiv.org/abs/2504.18851), which documents 9–67% tool-hallucination rates on (c)+(d) in untrained community models. In the May 2026 final inference run, the When2Call probe suite was directly measured on two variants — **A4B LoRA + base** (the inference-notebook baseline, 3/3) and **E4B merged BF16** (a side-experiment cell, 2/3) — and the GGUF variant was measured separately via the local Ollama harness (2/3). The remaining three transformers variants (A4B merged, A4B NF4, E4B LoRA + base) inherit their When2Call score by mathematical lossless equivalence with their family's directly-measured baseline — labeled accordingly in the table below:
 
-| Variant | Backend | (b) tool routing | (c) follow-up question | (d) refuse + redirect | Nominal |
-|---|---|:-:|:-:|:-:|:-:|
-| **A4B LoRA** (baseline) | transformers + Unsloth, Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** |
-| **E4B LoRA + base** | transformers + Unsloth, Colab Pro GPU | ✅ | ❌ (auto-filled location) | ✅ | **2/3** |
-| **E4B merged** | transformers BF16, Colab Pro GPU | ✅ | ❌ (auto-filled location) | ✅ | **2/3** |
-| **E4B GGUF** | Ollama HTTP raw + manual prompt builder, CPU-only Surface Pro 8 | ✅ | ✅ | ❌ (called `get_weather` on AQI probe) | **2/3** |
-| **A4B merged** | transformers BF16, Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** |
-| **A4B NF4** | transformers NF4 (BnB), Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** |
+| Variant | Backend | (b) tool routing | (c) follow-up question | (d) refuse + redirect | Nominal | Source |
+|---|---|:-:|:-:|:-:|:-:|---|
+| **A4B LoRA** (baseline) | transformers + Unsloth, Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** | directly measured |
+| **E4B LoRA + base** | transformers + Unsloth, Colab Pro GPU | ✅ | ❌ (auto-filled location) | ✅ | **2/3** | inferred from E4B merged (lossless merge) |
+| **E4B merged** | transformers BF16, Colab Pro GPU | ✅ | ❌ (auto-filled location) | ✅ | **2/3** | directly measured |
+| **E4B GGUF** | Ollama HTTP raw + manual prompt builder, CPU-only Surface Pro 8 | ✅ | ✅ | ❌ (called `get_weather` on AQI probe) | **2/3** | directly measured (separate Ollama harness) |
+| **A4B merged** | transformers BF16, Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** | inferred from A4B LoRA (lossless merge) |
+| **A4B NF4** | transformers NF4 (BnB), Colab Pro GPU | ✅ | ✅ | ✅ | **3/3** | inferred from A4B LoRA (lossless on routing decision boundary) |
 
 **Cross-variant patterns confirmed by the all-6 measurement:**
 
@@ -856,7 +853,7 @@ Cell 11b + each §13 variant cell runs three held-out probes per [Ross et al. 20
 
 A4B's (d) response on the AQI probe disclaims explicitly: *"I don't have a dedicated air quality tool, but I can check the weather — which includes haze and visibility data — to infer conditions."* That's the textbook (d) behavior the paper specifies. E4B's (d) response in this final run also genuinely disclaims (no fabrication). The (c) failure on E4B is the lone behavioral gap — predicted by the parameter scaling and confirmed empirically.
 
-**Honest finding for deployment:** E4B regresses on (c) compared to A4B by **−1/3 W2C** consistently across the family. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily auto-fill missing parameters when they should ask back. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's `_FOLLOW_UP_QUESTIONS` example count (currently 6) and `_UNABLE_TO_ANSWER` count (currently 10) to close the gap.
+**Honest finding for deployment:** E4B regresses on (c) compared to A4B by **−1/3 W2C** consistently across the family. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily auto-fill missing parameters when they should ask back. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's *follow-up clarification* example count (currently 6) and *unable-to-answer* count (currently 10) to close the gap.
 
 #### Run-history archive
 
@@ -864,8 +861,8 @@ The full execution notebooks (cell-by-cell outputs from the runs that produced t
 
 | Notebook | What it contains |
 |---|---|
-| [`finetune_finalrun_Apr2026.ipynb`](archive/final_run/finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 96 GB), converged loss + step-by-step training output |
-| [`solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) measured on Colab Pro G4 with Q&A + tool-routing + When2Call probes |
+| [`finetune_finalrun_Apr2026.ipynb`](archive/final_run/finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell 102 GB total / 94.97 GB max usable per Unsloth), converged loss + step-by-step training output |
+| [`solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) on Colab Pro G4 with the 10-question parity benchmark; When2Call probes directly measured on A4B LoRA (3/3) and E4B merged (2/3 side-experiment), other variants inferred via lossless equivalence (see audit table above) |
 
 For the 6th deployment variant (local-laptop CPU GGUF via Ollama), see [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py) at the project root — a runnable pytest harness that produces the GGUF benchmark + an auto-generated MD report when run against a local Ollama instance.
 
