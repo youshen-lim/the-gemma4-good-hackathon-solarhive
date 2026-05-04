@@ -856,7 +856,18 @@ Cell 11b + each §13 variant cell runs three held-out probes per [Ross et al. 20
 
 A4B's (d) response on the AQI probe disclaims explicitly: *"I don't have a dedicated air quality tool, but I can check the weather — which includes haze and visibility data — to infer conditions."* That's the textbook (d) behavior the paper specifies. E4B's (d) response in this final run also genuinely disclaims (no fabrication). The (c) failure on E4B is the lone behavioral gap — predicted by the parameter scaling and confirmed empirically.
 
-**Honest finding for deployment:** E4B regresses on (c) compared to A4B by **−1/3 W2C** consistently across the family. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily auto-fill missing parameters when they should ask back. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future v3 fine-tune could increase E4B's `_FOLLOW_UP_QUESTIONS` example count (currently 6) and `_UNABLE_TO_ANSWER` count (currently 10) to close the gap.
+**Honest finding for deployment:** E4B regresses on (c) compared to A4B by **−1/3 W2C** consistently across the family. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily auto-fill missing parameters when they should ask back. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's `_FOLLOW_UP_QUESTIONS` example count (currently 6) and `_UNABLE_TO_ANSWER` count (currently 10) to close the gap.
+
+#### Run-history archive
+
+The full execution notebooks (cell-by-cell outputs from the runs that produced the benchmark numbers above) are preserved in [`archive/final_run/`](archive/final_run/) for reproducibility audit:
+
+| Notebook | What it contains |
+|---|---|
+| [`finetune_finalrun_Apr2026.ipynb`](archive/final_run/finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 96 GB), converged loss + step-by-step training output |
+| [`solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) measured on Colab Pro G4 with Q&A + tool-routing + When2Call probes |
+
+For the 6th deployment variant (local-laptop CPU GGUF via Ollama), see [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py) at the project root — a runnable pytest harness that produces the GGUF benchmark + an auto-generated MD report when run against a local Ollama instance.
 
 #### Hypothesis: A4B was expected to outperform smaller variants on reasoning-heavy probes
 
