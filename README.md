@@ -566,7 +566,7 @@ See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-me
 
 > **Hackathon track:** Cactus Special Technology Track — *"For the best local-first mobile or wearable application that intelligently routes tasks between models."*
 
-For the **native mobile** Phone tier, SolarHive targets the Cactus Special Technology Track via [Cactus](https://github.com/cactus-compute/cactus) — a mobile-first inference runtime that targets ARM SoCs across Apple Silicon Macs, iPhones / iPads, Vision Pro, and Android ARM64 devices, with hardware acceleration via integrated NPUs (Apple Neural Engine, Qualcomm Hexagon, MediaTek/Exynos APU). Cactus's [supported-models table](https://github.com/cactus-compute/cactus) lists `google/gemma-4-E4B-it`, so the SolarHive fine-tune ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) drops in via `cactus convert ... --precision INT4`.
+For the **native mobile** Phone tier, SolarHive targets the Cactus Special Technology Track via [Cactus Compute](https://cactuscompute.com/) ([GitHub](https://github.com/cactus-compute/cactus)) — a mobile-first inference runtime that targets ARM SoCs across Apple Silicon Macs, iPhones / iPads, Vision Pro, and Android ARM64 devices, with hardware acceleration via integrated NPUs (Apple Neural Engine, Qualcomm Hexagon, MediaTek/Exynos APU). Cactus's [supported-models table](https://github.com/cactus-compute/cactus) lists `google/gemma-4-E4B-it`, so the SolarHive fine-tune ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) drops in via `cactus convert ... --precision INT4`.
 
 **Notebook:** [`solarhive_e4b_cactus.ipynb`](solarhive_e4b_cactus.ipynb) covers the full Cactus deployment pipeline end-to-end:
 
@@ -578,11 +578,12 @@ For the **native mobile** Phone tier, SolarHive targets the Cactus Special Techn
 6. Run a 10-prompt smoke test via the Cactus Python SDK (Class A — five domain Q&A probes; Class B — five SolarHive emoji-format prompts)
 7. Emit a three-outcome quality verdict
 
-**Validated on Colab Pro CPU + High-RAM (`archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
+**Validated on Colab Pro CPU + High-RAM — convert path; ARM-only build + Python SDK smoke test gracefully skipped on x86 (`archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
 
 - Install + auth + 16 GB safetensors download: **passed** (~1 min total)
 - `cactus convert ... --precision INT4`: **passed** (exit 0, 274s ≈ 4.5 min; observed 4–7 min range across runs)
 - Converted artifact: **6.94 GB INT4 multimodal** (audio Conformer + vision encoder retained FP16 alongside INT4 text)
+- Tensor mix from Cactus's converter log: **343 INT4 + 2 INT8 + 1,732 FP16** (text weights INT4-quantized; audio + vision towers retained FP16)
 - Cactus's reported quant fidelity (deterministic across runs): **CosSim 0.9946 mean / SNR 19.8 dB mean / MSE 5.18e-04 mean**
 
 **Why two steps skip on x86 dev hosts.** The Cactus C++ engine targets ARM platforms by design — its CMake build hardcodes `-march=armv8.2-a+i8mm` and the SIMD kernels use ARM intrinsics with no x86 fallback. The official [Cactus Gemma 4 deployment blog](https://docs.cactuscompute.com/v1.14/blog/gemma4/) states verbatim: *"Cactus targets ARM across platforms: Apple Silicon Macs, iPhones, iPads, Vision Pro, and Android devices with ARM64 chipsets."* On x86 development hosts (Colab CPU/GPU runtimes, x86 servers) the build step + Python SDK smoke test gracefully skip; the convert step is pure-Python and runs anywhere, producing a deployable artifact for the companion Flutter Android app.
@@ -590,6 +591,17 @@ For the **native mobile** Phone tier, SolarHive targets the Cactus Special Techn
 **Why the build step + Python SDK code stays in source.** The notebook keeps the full deployment pipeline visible so judges can read the Cactus integration end-to-end (the build invocation, the Python SDK calls, the prompt classes, the verdict logic), gated behind a runtime check (`_IS_ARM_HOST = platform.machine().lower() in ("aarch64", "arm64", "armv8")`). On ARM hosts (Apple Silicon Mac, Pi 5, Android emulator on ARM, ARM cloud VM) the same notebook runs end-to-end — build, smoke test, three-outcome quality verdict. The dual-mode design means the GitHub repo demonstrates the complete on-device deployment story regardless of where the reader runs the notebook.
 
 The companion **Flutter Android app** (`mobile-cactus/`, in development) loads the converted artifact via the [Cactus Flutter SDK](https://pub.dev/packages/cactus) and runs the on-device quality gate (the Class A ≥4/5 + Class B ≥3/5 verdict deferred from the notebook on x86) on real ARM hardware.
+
+**Citation.** Per the [Cactus repository](https://github.com/cactus-compute/cactus)'s recommended attribution:
+
+```bibtex
+@software{cactus,
+  title  = {Cactus: AI Inference Engine for Phones & Wearables},
+  author = {Ndubuaku, Henry and Cactus Team},
+  url    = {https://github.com/cactus-compute/cactus},
+  year   = {2025}
+}
+```
 
 ---
 
