@@ -12,6 +12,7 @@
 [![Model](https://img.shields.io/badge/Gemma%204-26B%20A4B-4285F4?logo=google)](https://kaggle.com/models/google/gemma-4)
 [![Demo](https://img.shields.io/badge/HF%20Space-Live%20Demo-FFD21E?logo=huggingface)](https://huggingface.co/spaces/Truthseeker87/solarhive)
 [![Ollama](https://img.shields.io/badge/Ollama-Local%20Inference-black?logo=ollama)](https://ollama.com/library/gemma4)
+[![llama.cpp](https://img.shields.io/badge/llama.cpp-GGUF%20Edge-555555)](https://github.com/ggml-org/llama.cpp)
 [![Unsloth](https://img.shields.io/badge/Unsloth-Fine--Tuned-FF6B35)](https://unsloth.ai)
 [![License](https://img.shields.io/badge/License-MIT-green)](LICENSE)
 
@@ -341,7 +342,7 @@ result = solarhive_agent(
 
 ---
 
-### Feature 3 — Dual Fine-Tuned Domain Expert (Unsloth + Ollama)
+### Feature 3 — Dual Fine-Tuned Domain Expert *(Unsloth + Ollama + llama.cpp Special Tech Tracks)*
 
 **Why these models?** Gemma 4 offers four model sizes. We evaluated all
 four and selected two complementary architectures for a dual fine-tune
@@ -508,7 +509,7 @@ fine-tuning notebook was the only HF artifact for the E4B family until
 that step). It bootstraps the `solarhive_merge_e4b.ipynb` recipe so
 that notebook is now runnable on a fresh Colab session.
 
-### Edge GGUF deployment — both Q4_K_M variants score 10/10 on a 16 GB laptop
+### Feature 4 — Edge GGUF Deployment *(Ollama + llama.cpp Special Tech Tracks)*
 
 The fine-tuned E4B was quantized to two interchangeable Q4_K_M GGUF variants for Ollama / llama.cpp edge deployment. Both were inferenced on the **same** 16 GB Intel i5-1135G7 laptop CPU via Ollama 0.21.0 — confirming quantization-precision independence at the edge-inference target.
 
@@ -524,7 +525,7 @@ The fine-tuned E4B was quantized to two interchangeable Q4_K_M GGUF variants for
 
 Both pair with the same 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
 
-### Three-tier hardware deployment — one fine-tuning pipeline, four runtime targets
+### Feature 5 — Multi-Tier Hardware Deployment *(One fine-tune, five runtime targets)*
 
 The same fine-tuned SolarHive model family serves four distinct hardware classes. Each tier is operationally validated (✅) or planned (🔜):
 
@@ -542,7 +543,7 @@ One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical co
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama, llama.cpp, or LiteRT keeps community energy data inside the neighborhood. No cloud dependency, no latency penalty, no privacy concerns — the AI runs where the community lives.
 
-### On-device reasoning pattern — deterministic workflow + E2B LiteRT
+### Feature 6 — On-Device Reasoning Pattern *(LiteRT browser tier)*
 
 For the Phone / browser tier specifically, the recommended pattern is to couple the on-device E2B LiteRT model with a **deterministic workflow that pulls live data on the device or at a local endpoint, then injects the fetched values into the E2B prompt as grounded context.** E2B reasons over the context and emits the compact emoji response; it does not orchestrate API calls directly.
 
@@ -562,7 +563,7 @@ For the Phone / browser tier specifically, the recommended pattern is to couple 
 
 See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-merged) (once published) for the full deployment recipe and the `solarhive_e2b_liteRT_finetune.ipynb` notebook for the fine-tune pipeline.
 
-### Cactus integration — fine-tuned E4B → on-device mobile inference *(Cactus Special Technology Track)*
+### Feature 7 — Cactus Integration *(Cactus Special Technology Track)*
 
 > **Hackathon track:** Cactus Special Technology Track — *"For the best local-first mobile or wearable application that intelligently routes tasks between models."*
 
