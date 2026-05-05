@@ -578,7 +578,7 @@ For the **native mobile** Phone tier, SolarHive targets the Cactus Special Techn
 6. Run a 10-prompt smoke test via the Cactus Python SDK (Class A — five domain Q&A probes; Class B — five SolarHive emoji-format prompts)
 7. Emit a three-outcome quality verdict
 
-**Validated on Colab Pro CPU + High-RAM (`archive/final_run/solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
+**Validated on Colab Pro CPU + High-RAM (`archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
 
 - Install + auth + 16 GB safetensors download: **passed** (~1 min total)
 - `cactus convert ... --precision INT4`: **passed** (exit 0, 274s ≈ 4.5 min; observed 4–7 min range across runs)
@@ -900,8 +900,8 @@ The full execution notebooks (cell-by-cell outputs from the runs that produced t
 
 | Notebook | What it contains |
 |---|---|
-| [`finetune_finalrun_Apr2026.ipynb`](archive/final_run/finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell 102 GB total / 94.97 GB max usable per Unsloth), converged loss + step-by-step training output |
-| [`solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) on Colab Pro G4 with the 10-question parity benchmark; When2Call probes directly measured on A4B LoRA (3/3) and E4B merged (2/3 side-experiment), other variants inferred via lossless equivalence (see audit table above) |
+| [`2_solarhive_finetune_finalrun_Apr2026.ipynb`](archive/final_run/2_solarhive_finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell 102 GB total / 94.97 GB max usable per Unsloth), converged loss + step-by-step training output |
+| [`3_solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/3_solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) on Colab Pro G4 with the 10-question parity benchmark; When2Call probes directly measured on A4B LoRA (3/3) and E4B merged (2/3 side-experiment), other variants inferred via lossless equivalence (see audit table above) |
 
 For the 6th deployment variant (local-laptop CPU GGUF via Ollama), see [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py) at the project root — a runnable pytest harness that produces the GGUF benchmark + an auto-generated MD report when run against a local Ollama instance.
 
