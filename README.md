@@ -1186,6 +1186,22 @@ community-level optimization.
 
 ---
 
+## Special Technology Tracks
+
+The Special Technology Tracks recognize outstanding technical achievement using specific tools and frameworks within the Gemma 4 ecosystem. Projects are eligible to win both a Main Track Prize **and** a Special Technology Prize. SolarHive targets all five tracks with the same fine-tuned model family + canonical 1,727-row dataset; the deployment surface is the only variable.
+
+| Track | Official description | SolarHive deliverable | Status |
+|---|---|---|---|
+| **Unsloth** | *"For the best fine-tuned Gemma 4 model created using Unsloth, optimized for a specific, impactful task."* | Dual fine-tune via Unsloth `FastVisionModel` — E4B + 26B A4B LoRA adapters on the SolarHive 1,727-row community-solar corpus. See [`solarhive_finetune.py`](solarhive_finetune.py) and [`solarhive-26b-a4b-lora`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) / [`solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora). | ✅ shipped |
+| **Ollama** | *"For the best project that utilizes and showcases the capabilities of Gemma 4 running locally via Ollama."* | E4B Q4_K_M GGUF served through Ollama on a 16 GB CPU laptop with the Sol-B `/api/generate` raw-mode + manual Gemma 4 prompt builder — **10/10 parity** with the cloud 26B A4B benchmark. See [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py). | ✅ shipped |
+| **llama.cpp** | *"For the best innovative implementation of Gemma 4 on resource-constrained hardware."* | E4B Q4_K_M + 992 MB mmproj (vision SigLIP + audio Conformer, 1,411 tensors) — full multimodal via `llama-server --mmproj` on resource-constrained hardware. PLE-override Q4_0 variant fits 16 GB CPU laptop; standard Q4_K_M variant fits the [Jetson Orin Nano Super (7–25 W, $249)](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/). See [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf). | ✅ shipped |
+| **LiteRT** | *"For the most compelling and effective use case built using Google AI Edge's LiteRT implementation of Gemma 4."* | Browser-tier deployment via Google AI Edge's LiteRT — E2B `.tflite` for the Phone (browser) tier with on-device deterministic-workflow + emoji-format reasoning. | 🔜 in development |
+| **Cactus** | *"For the best local-first mobile or wearable application that intelligently routes tasks between models."* | Native-mobile deployment via [Cactus](https://github.com/cactus-compute/cactus) — fine-tuned E4B → INT4 mobile artifact (6.94 GB multimodal, CosSim 0.9946 quant fidelity) loaded by a companion Flutter Android app via the [Cactus Flutter SDK](https://pub.dev/packages/cactus). Convert pipeline validated end-to-end on Colab Pro CPU + High-RAM. See [`solarhive_e4b_cactus.ipynb`](solarhive_e4b_cactus.ipynb). | ✅ convert pipeline shipped; Flutter app in development |
+
+**Why one model, five tracks:** the same Unsloth fine-tune feeds the merged-safetensors source ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)), which then becomes the GGUF for llama.cpp + Ollama, the INT4 mobile artifact for Cactus, and the `.tflite` for LiteRT. One training run, one chat template, five deployment surfaces — every track demonstrates the same fine-tune behaving correctly under different runtime constraints.
+
+---
+
 ## Hackathon Submission
 
 | Item | Detail |
@@ -1193,7 +1209,7 @@ community-level optimization.
 | Competition | [The Gemma 4 Good Hackathon](https://kaggle.com/competitions/gemma-4-good-hackathon) |
 | Organizers | Google DeepMind x Kaggle |
 | Main Track | Global Resilience |
-| Special Tech tracks | **Ollama** (E4B GGUF, 10/10 benchmark) + **llama.cpp** (mmproj + PLE-override on 16 GB CPU) + **Unsloth** (dual fine-tune) |
+| Special Tech tracks | **Unsloth** + **Ollama** + **llama.cpp** + **LiteRT** + **Cactus** (see table above) |
 | Deadline | May 18, 2026 at 11:59 PM UTC |
 | Kaggle profile | [melricko](https://kaggle.com/melricko) |
 | GitHub | [youshen-lim/the-gemma4-good-hackathon-solarhive](https://github.com/youshen-lim/the-gemma4-good-hackathon-solarhive) |
