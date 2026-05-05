@@ -2,10 +2,11 @@
 
 # SolarHive
 ## AI-Powered Community Solar Energy Intelligence
+### *(Unsloth + Ollama + llama.cpp + LiteRT + Cactus Special Tech Tracks)*
 
 > **The Gemma 4 Good Hackathon** — Google DeepMind x Kaggle
 > **Track:** Global Resilience
-> **Special Technology Tracks:** Ollama, Unsloth
+> **Special Technology Tracks:** Unsloth, Ollama, llama.cpp, LiteRT, Cactus
 
 [![Kaggle](https://img.shields.io/badge/Kaggle-Gemma%204%20Good%20Hackathon-20BEFF?logo=kaggle)](https://kaggle.com/competitions/gemma-4-good-hackathon)
 [![Model](https://img.shields.io/badge/Gemma%204-26B%20A4B-4285F4?logo=google)](https://kaggle.com/models/google/gemma-4)
@@ -529,12 +530,13 @@ The same fine-tuned SolarHive model family serves four distinct hardware classes
 
 | Tier | Hardware | Cost | Power | Runtime | Model variant | Track | Status |
 |------|----------|------|-------|---------|---------------|-------|--------|
-| **Phone** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | E2B `.tflite` | LiteRT | 🔜 planned (see the LiteRT browser deployment plan) |
+| **Phone (browser)** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | E2B `.tflite` | LiteRT | 🔜 planned (see the LiteRT browser deployment plan) |
+| **Phone (native)** | ARM64 Android / Apple Silicon | $0 (existing phone) | phone battery | [Cactus](https://github.com/cactus-compute/cactus) (mobile-NPU runtime) | Fine-tuned E4B → INT4 (`solarhive-e4b-cactus`) | Cactus | ✅ Convert pipeline validated on Colab; Flutter Android app in development |
 | **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M + mmproj (5.3 GB total) | llama.cpp | ✅ GGUF directly deployable today |
 | **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 parity benchmark proven |
 | **Cloud** | HF Space / Colab | — | — | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | ✅ Live demo + 8/8 agentic benchmark |
 
-One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical corpus), one chat template, four hardware classes, four Special Tech tracks (LiteRT, llama.cpp, Ollama, Unsloth) — the deployment target is the only variable.
+One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical corpus), one chat template, five hardware classes, five Special Tech tracks (LiteRT, Cactus, llama.cpp, Ollama, Unsloth) — the deployment target is the only variable.
 
 **Why the Jetson Orin Nano Super matters:** at 7–25 W on a $249 board, a single Jetson can run 24/7 from a modest solar-plus-battery setup — the SolarHive intelligence runs on the same energy infrastructure it advises. Mobile clients on the local network hit the hub at `http://<hub-ip>:8080` for tool-calling responses with live API data. Nvidia's [official Gemma 4 Jetson recipe](https://huggingface.co/blog/nvidia/gemma4) uses our exact llama.cpp stack; our `solarhive-e4b-q4_k_m.gguf` (4.61 GB) drops in directly with only the CUDA build flag change (`-DGGML_CUDA=ON`, `-DCMAKE_CUDA_ARCHITECTURES="87"`).
 
@@ -559,6 +561,35 @@ For the Phone / browser tier specifically, the recommended pattern is to couple 
 **Why this beats on-device tool calling at the ultra-edge tier:** smaller models degrade on structured tool-call output; client-side tool calling exposes API keys in page source; the emoji system prompt conflicts with a tool-calling system prompt. The deterministic workflow handles orchestration as plain code and hands E2B a single well-scoped reasoning task. The pattern works identically on native mobile (Swift / Kotlin / Flutter), browser (MediaPipe LLM Inference Web + WebGPU), and Raspberry Pi 5 (`litert-lm` Python), and degrades gracefully to cached values when APIs are unreachable.
 
 See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-merged) (once published) for the full deployment recipe and the `solarhive_e2b_liteRT_finetune.ipynb` notebook for the fine-tune pipeline.
+
+### Cactus integration — fine-tuned E4B → on-device mobile inference *(Cactus Special Technology Track)*
+
+> **Hackathon track:** Cactus Special Technology Track — *"For the best local-first mobile or wearable application that intelligently routes tasks between models."*
+
+For the **native mobile** Phone tier, SolarHive targets the Cactus Special Technology Track via [Cactus](https://github.com/cactus-compute/cactus) — a mobile-first inference runtime that targets ARM SoCs across Apple Silicon Macs, iPhones / iPads, Vision Pro, and Android ARM64 devices, with hardware acceleration via integrated NPUs (Apple Neural Engine, Qualcomm Hexagon, MediaTek/Exynos APU). Cactus's [supported-models table](https://github.com/cactus-compute/cactus) lists `google/gemma-4-E4B-it`, so the SolarHive fine-tune ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) drops in via `cactus convert ... --precision INT4`.
+
+**Notebook:** [`solarhive_e4b_cactus.ipynb`](solarhive_e4b_cactus.ipynb) covers the full Cactus deployment pipeline end-to-end:
+
+1. Install `cactus-compute` from GitHub with a name-collision verification gate
+2. Compile `libcactus.so` via `cactus build --python` (the C++ engine, ARM hosts only)
+3. Authenticate to HuggingFace and resolve the fine-tuned merged safetensors
+4. Run `cactus convert ... --precision INT4` to produce the deployable mobile artifact
+5. Inspect the artifact (per-file inventory + total size)
+6. Run a 10-prompt smoke test via the Cactus Python SDK (Class A — five domain Q&A probes; Class B — five SolarHive emoji-format prompts)
+7. Emit a three-outcome quality verdict
+
+**Validated on Colab Pro CPU + High-RAM (`archive/final_run/solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
+
+- Install + auth + 16 GB safetensors download: **passed** (~1 min total)
+- `cactus convert ... --precision INT4`: **passed** (exit 0, 274s ≈ 4.5 min; observed 4–7 min range across runs)
+- Converted artifact: **6.94 GB INT4 multimodal** (audio Conformer + vision encoder retained FP16 alongside INT4 text)
+- Cactus's reported quant fidelity (deterministic across runs): **CosSim 0.9946 mean / SNR 19.8 dB mean / MSE 5.18e-04 mean**
+
+**Why two steps skip on x86 dev hosts.** The Cactus C++ engine targets ARM platforms by design — its CMake build hardcodes `-march=armv8.2-a+i8mm` and the SIMD kernels use ARM intrinsics with no x86 fallback. The official [Cactus Gemma 4 deployment blog](https://docs.cactuscompute.com/v1.14/blog/gemma4/) states verbatim: *"Cactus targets ARM across platforms: Apple Silicon Macs, iPhones, iPads, Vision Pro, and Android devices with ARM64 chipsets."* On x86 development hosts (Colab CPU/GPU runtimes, x86 servers) the build step + Python SDK smoke test gracefully skip; the convert step is pure-Python and runs anywhere, producing a deployable artifact for the companion Flutter Android app.
+
+**Why the build step + Python SDK code stays in source.** The notebook keeps the full deployment pipeline visible so judges can read the Cactus integration end-to-end (the build invocation, the Python SDK calls, the prompt classes, the verdict logic), gated behind a runtime check (`_IS_ARM_HOST = platform.machine().lower() in ("aarch64", "arm64", "armv8")`). On ARM hosts (Apple Silicon Mac, Pi 5, Android emulator on ARM, ARM cloud VM) the same notebook runs end-to-end — build, smoke test, three-outcome quality verdict. The dual-mode design means the GitHub repo demonstrates the complete on-device deployment story regardless of where the reader runs the notebook.
+
+The companion **Flutter Android app** (`mobile-cactus/`, in development) loads the converted artifact via the [Cactus Flutter SDK](https://pub.dev/packages/cactus) and runs the on-device quality gate (the Class A ≥4/5 + Class B ≥3/5 verdict deferred from the notebook on x86) on real ARM hardware.
 
 ---
 
@@ -702,7 +733,15 @@ the-gemma4-good-hackathon-solarhive/
 ├── solarhive_finetune.ipynb     # Jupyter notebook version
 ├── solarhive_datagen.py         # Data generation: 4 live APIs → training examples
 │                                # + 14 diagnostic charts
-└── solarhive_datagen.ipynb      # Jupyter notebook version
+├── solarhive_datagen.ipynb      # Jupyter notebook version
+├── solarhive_e4b_cactus.py      # Cactus mobile deployment: fine-tuned E4B →
+│                                # `cactus convert --precision INT4` → on-device
+│                                # Python SDK smoke test (ARM hosts) → verdict
+├── solarhive_e4b_cactus.ipynb   # Jupyter notebook version
+└── archive/final_run/           # Archived final-run notebooks with cell outputs
+    ├── finetune_finalrun_Apr2026.ipynb
+    ├── solarhive_inference_finalrun_May2026.ipynb
+    └── solarhive_e4b_cactus_finalrun_May2026.ipynb
 ```
 
 ---
