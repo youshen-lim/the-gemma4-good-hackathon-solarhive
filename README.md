@@ -531,7 +531,7 @@ The same fine-tuned SolarHive model family serves four distinct hardware classes
 
 | Tier | Hardware | Cost | Power | Runtime | Model variant | Track | Status |
 |------|----------|------|-------|---------|---------------|-------|--------|
-| **Phone (browser)** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | E2B `.tflite` | LiteRT | 🔜 planned (see the LiteRT browser deployment plan) |
+| **Phone (browser)** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | Base E4B `.task` (upstream pre-converted) + SolarHive UX layer + on-device agentic loop | LiteRT | ✅ Browser app shipped at [`web-litert/`](web-litert/) |
 | **Phone (native)** | ARM64 Android / Apple Silicon | $0 (existing phone) | phone battery | [Cactus](https://github.com/cactus-compute/cactus) (mobile-NPU runtime) | Fine-tuned E4B → INT4 (`solarhive-e4b-cactus`) | Cactus | ✅ Convert pipeline validated on Colab; Flutter Android app in development |
 | **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M + mmproj (5.3 GB total) | llama.cpp | ✅ GGUF directly deployable today |
 | **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 parity benchmark proven |
@@ -602,6 +602,96 @@ The companion **Flutter Android app** (`mobile-cactus/`, in development) loads t
   url    = {https://github.com/cactus-compute/cactus},
   year   = {2025}
 }
+```
+
+### Feature 8 — LiteRT Integration *(LiteRT Special Technology Track)*
+
+> **Hackathon track:** LiteRT Special Technology Track — *"For the most compelling and effective use case built using Google AI Edge's LiteRT implementation of Gemma 4."*
+
+For the **mobile / single-board / browser** edge tiers, SolarHive targets the LiteRT Special Technology Track via [Google AI Edge LiteRT-LM](https://ai.google.dev/edge/litert-lm) ([repository](https://github.com/google-ai-edge/LiteRT-LM)) — Google's first-party Gemma 4 edge inference framework, with SDK families for Android (Kotlin), iOS / macOS (C++; Swift APIs upcoming), Linux Python on edge hardware (Raspberry Pi 5, NVIDIA Jetson Orin Nano Super, laptops), Windows Python (upcoming), and Web (via the companion `.task` bundle on WebGPU). The April 2, 2026 Google Developers Blog [*"Bring state-of-the-art agentic skills to the edge with Gemma 4"*](https://developers.googleblog.com/bring-state-of-the-art-agentic-skills-to-the-edge-with-gemma-4/) endorses LiteRT-LM as the canonical mobile-edge runtime for Gemma 4 agentic workflows.
+
+**Crucially, the LiteRT tier ships the upstream pre-converted base Gemma 4 E4B `.litertlm` bundle from [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)**, *not* the SolarHive fine-tune. This is a deliberate asymmetry from the other Special Tech tiers (Cactus mobile, Ollama, llama.cpp, microgrid hub), which all ship the SolarHive fine-tune end-to-end. The asymmetry is driven by upstream conversion-tooling availability — see *"Why the LiteRT tier uses base, not fine-tuned"* below for the verified gap, and *"Next iteration — fine-tuned LiteRT-LM bundle (pending steps)"* for the planned follow-up. The SolarHive engineering layer sits **on top** of the upstream base bundle: a runtime system prompt + on-device agentic loop with native function calling + emoji-format UX. **One bundle, multiple LiteRT-LM SDK targets, same agentic-loop shape across all of them** — that is the cross-platform contract claim, and the runtime-demo verdict below backs it numerically.
+
+#### Runtime demo on LiteRT-LM Python
+
+**Notebook:** [`solarhive_e4b_litert_v3.1.ipynb`](solarhive_e4b_litert_v3.1.ipynb) loads the upstream pre-converted base bundle via the LiteRT-LM Python SDK (`litert-lm-api-nightly`), runs an 8-prompt SolarHive benchmark + a 3-probe When2Call sub-bench + a Multi-Token Prediction probe + a multi-modal VQA probe, and emits a verdict tabulating the measurement against the verbatim mobile-edge benchmarks Google publishes in the [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) model card.
+
+**Validated on Colab Pro CPU + High-RAM (Linux x86_64) — runtime demo, archive [`archive/final_run/5_solarhive_e4b_litert_finalrun_May2026.ipynb`](archive/final_run/5_solarhive_e4b_litert_finalrun_May2026.ipynb):**
+
+- **Q&A benchmark: 8/8** ✅ — every SolarHive prompt answered with grounded data; 13 tool calls executed across 8 prompts (six single-tool prompts plus two multi-tool comparisons)
+- **Tool-call format: 9/9 native curly-wrapped, 0 parens drift** — base Gemma 4 E4B held the documented `<|tool_call>call:fn{...}<tool_call|>` format perfectly across every benchmark round; the parens-fallback regex shipped as belt-and-suspenders was empirically unused
+- **Decode throughput: 8.29 tok/s on Colab x86_64 CPU** (median over the 8-prompt benchmark) — **2.6× headroom** above Google's published Pi 5 16GB CPU ARM number (3.2 tok/s) and 0.86× of iPhone 17 Pro CPU (9.7 tok/s), placing our measurement in the same throughput class as documented mobile CPU targets
+- **Engine cold-start: 15.32s** | **Warmup TTFT: 2.63s** | **Bundle download: 22.5s** for the 3.66 GB `.litertlm`
+- **Multi-Token Prediction probe: graceful skip with the architecturally correct *"drafter pairing required"* message** — MTP is implemented as a paired drafter model artifact (see the *"Caveat — Multi-Token Prediction (MTP) drafters"* subsection earlier in this README), not as a runtime kwarg on a single bundle; pairing a drafter is part of the next-iteration plan below
+- **Multi-modal VQA probe: graceful skip on auth** — the sky-photo dataset is private until submission day; the cell graceful-skips and the rest of the run is unaffected
+- **When2Call sub-bench: 1/3 raw, functionally 2/3** — probe (b) ✅ correct tool routing; probe (c) auto-filled defaults instead of asking ❌; probe (d) refused correctly with *"I do not have a tool available to retrieve real-time air quality data..."* but the scorer's keyword list missed *"do not"* (a follow-up patch is identified)
+
+**Cross-platform contract — what runs in this notebook ports unchanged to:**
+
+| Mobile-edge target | What carries over | What changes |
+|---|---|---|
+| **Android phone** (Kotlin SDK) | `.litertlm` bundle, system prompt, 5 tool definitions, `_extract_tool_calls`/`_parse_tool_args` regex (Kotlin port), When2Call probe set | Engine + Conversation API switch from `litert_lm.Engine` (Python) → `LiteRTLMEngine` (Kotlin); native UI |
+| **iPhone / iPad** (C++ SDK; Swift APIs coming) | same bundle, same prompt, same tool-call format | Engine + Conversation API in C++; Swift wrapper as it lands |
+| **Browser on phone** (Chrome / Safari / Edge mobile) | same SolarHive prompt + tools; `.task` bundle (companion to `.litertlm`) | MediaPipe Tasks Web via `@mediapipe/tasks-genai`; covered by [`web-litert/app.js`](web-litert/) |
+| **Raspberry Pi 5 microgrid hub** (ARM Linux Python) | identical SDK, identical bundle, identical code | nothing — same Python source runs |
+| **NVIDIA Jetson Orin Nano Super** (ARM Linux Python) | identical SDK, identical bundle, identical code | nothing — same Python source runs |
+| **Linux laptop** (x86_64 Python) | identical SDK, identical bundle, identical code | nothing — same Python source runs |
+
+The agentic loop, tool-call regex, system prompt, and benchmark methodology are **mobile-portable** — moving from Colab Linux to Android Kotlin or iOS C++ is an SDK rebinding, not a re-architecture.
+
+#### Why the LiteRT tier uses base, not fine-tuned
+
+The other Special Tech tiers (Cactus mobile, Ollama, llama.cpp, microgrid hub) all ship the SolarHive fine-tune ([`Truthseeker87/solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) end-to-end, but the LiteRT tier ships the upstream pre-converted base bundle. The asymmetry is driven by upstream conversion-tooling availability: as of this submission, **no public path from fine-tuned Gemma 4 safetensors → `.litertlm` exists**. We verified this across multiple sources:
+
+- Google's [LiteRT conversion docs](https://ai.google.dev/edge/litert/conversion/overview) ship zero Gemma 4 examples and zero LoRA / fine-tune examples — ResNet18 is the sole PyTorch example.
+- The [`ai_edge_torch.generative.examples/`](https://github.com/google-ai-edge/ai-edge-torch/tree/main/ai_edge_torch/generative/examples) directory contains `gemma`, `gemma3`, `paligemma`, and 19 other architectures (`amd_llama_135m`, `deepseek`, `embedding_gemma`, `falcon`, `hammer`, `llama`, `moonshine`, `openelm`, `phi`, `qwen`, `qwen_vl`, `smollm`, `smolvlm2`, `stable_diffusion`, `t5`, `tiny_llama`, etc.) — but **no `gemma4` and no `gemma3n`** (verified via the GitHub Contents API). Gemma 3n is officially supported by the **MediaPipe LLM Inference runtime**, but its conversion code lives in internal Google tooling not exposed in the public examples tree, so the architectural-lineage hypothesis (load Gemma 4 weights via gemma3n builders) is moot.
+- Google's [LLM Inference supported-models list](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference) ships official example modules for Gemma 2 2B, Gemma 3 1B, and Gemma 3n E2B/E4B — but **not** Gemma 4 E-series.
+- [Unsloth ships no LiteRT export path](https://unsloth.ai/docs/sitemap.md) (only GGUF / safetensors / Ollama / vLLM / llama-server / SGLang).
+- [LiteRT-LM is runtime-only](https://github.com/google-ai-edge/LiteRT-LM) — it consumes pre-converted bundles produced upstream and ships no user-facing converter, per its repository description: *"Google's production-ready, high-performance, open-source inference framework for deploying Large Language Models on edge devices."*
+
+We exercised the [Gemma 3 1B fine-tune codelab](https://colab.research.google.com/github/google-ai-edge/mediapipe-samples/blob/main/codelabs/litert_inference/Gemma3_1b_fine_tune.ipynb) pattern (`ai-edge-torch.generative` Python API + `mediapipe.tasks.python.genai.bundler.create_bundle()`) against fine-tuned Gemma 4 E4B weights and confirmed the upstream gap end-to-end — the architecture-builder probe graceful-skips when the upstream `gemma4` example module is absent, exactly as the GitHub Contents API verification predicts. When that module lands upstream (or a community port appears), the same code path runs end-to-end with no edits — the deployable artifact then becomes a fine-tuned `.litertlm` rather than the upstream base, and the runtime-demo benchmark above can be re-run against it directly.
+
+#### Next iteration — fine-tuned LiteRT-LM bundle (pending steps)
+
+Once the upstream conversion path supports Gemma 4 E-series fine-tunes, the planned follow-up is:
+
+1. **Run [`ai_edge_torch.convert(...)`](https://github.com/google-ai-edge/ai-edge-torch)** on [`Truthseeker87/solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) — the LoRA-merged BF16 safetensors (~16 GB) — to produce a fine-tuned `.tflite`. (LoRA-only adapter weights live at [`Truthseeker87/solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) and could alternatively be merged inline at conversion time.)
+2. **Bundle the resulting `.tflite` + tokenizer** into a fine-tuned `.litertlm` via [`mediapipe.tasks.python.genai.bundler.create_bundle()`](https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference).
+3. **Re-run the Q&A + When2Call + VQA benchmarks** against the fine-tuned bundle and compare against the upstream-base verdict above. Expectation: When2Call should improve from 2/3 functional to 3/3 (the SolarHive A4B fine-tune already scores 3/3 on the same probe set per the [Multi-Variant Inference Benchmark](#multi-variant-deployment-validation--all-6-variants-measured) table further down — the SolarHive When2Call training corpus targets exactly the under-specified-query and out-of-scope-query regressions).
+4. **Publish the fine-tuned bundle** to a new HF repo `Truthseeker87/solarhive-e4b-litert` (Apache-2.0, mirroring the existing card patterns) for cross-tier variant consistency with the other Special Tech entries.
+5. **(Stretch) Pair a Multi-Token Prediction drafter** — once Google publishes a `.litertlm`-formatted MTP drafter for E4B in the [`litert-community/`](https://huggingface.co/litert-community) organization (analogous to [MLX's `gemma-4-assistant-mtp` collection](https://huggingface.co/collections/mlx-community/gemma-4-assistant-mtp)), pair it with the fine-tuned bundle for the up-to-3× decode speedup documented in Google's [May 5, 2026 MTP drafters announcement](https://blog.google/innovation-and-ai/technology/developers-tools/multi-token-prediction-gemma-4/).
+
+This iteration is **upside-only** relative to the base-bundle runtime demo — the 8/8 Q&A + cross-platform contract above already satisfies the track rule (*"For the most compelling and effective use case built using Google AI Edge's LiteRT implementation of Gemma 4"*); the fine-tuned bundle would be a strict improvement on the When2Call gap.
+
+#### Why LiteRT is the right phone-tier target regardless
+
+LiteRT is purpose-built for on-device Gemma 4 inference where Cactus, Ollama, and llama.cpp do not reach:
+
+- **Cross-platform from one bundle** — the same `.litertlm` runs on [Android, iOS, Linux, macOS, Windows, Raspberry Pi 5, and Web](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm); the Pi 5 16 GB CPU benchmark on the model card reports 3.2 tok/s decode, meaning the SolarHive deployment runs on the same Jetson-class hardware that already powers the microgrid hub.
+- **Browser-native, zero-install** — judges open a URL, the `.task` streams from Hugging Face, MediaPipe + WebGPU executes Gemma 4 E4B locally on the device. No app store, no APK, no native SDK install. The Web Chrome (M4 Max GPU) benchmark on the model card reports 44.4 tok/s decode.
+- **WebGPU acceleration** — Chrome / Edge auto-route inference to the integrated GPU; mobile Chrome on Android also activates WebGPU on supported GPUs.
+- **Privacy by construction** — all inference happens on the user's device; no API key in page source, no model weights leave the local process. Aligns directly with the SolarHive *"local-first, privacy-first"* posture that motivates the Special Tech Track strategy across Ollama, llama.cpp, Cactus, and LiteRT.
+- **Open standards, no vendor lock-in** — MediaPipe Tasks API + [WebGPU](https://www.w3.org/TR/webgpu/) spec; no proprietary SDK to license. Works offline once the bundle is browser-cached.
+- **Bundle-reuse pattern** — the [litert-community HF org](https://huggingface.co/litert-community) curates pre-converted production bundles for both [E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) (~2.6 GB) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) (~3.66 GB), Apache-2.0. The SolarHive UX wrapper inherits Google's conversion + benchmarking work for free — a fast-path that simply does not exist for Cactus / Ollama / llama.cpp.
+
+#### Browser companion ([`web-litert/`](web-litert/))
+
+The browser app loads the upstream `.task` bundle via [`@mediapipe/tasks-genai`](https://www.npmjs.com/package/@mediapipe/tasks-genai) on WebGPU, applies the SolarHive two-mode system prompt, and parses leading emojis to render a glanceable two-mode dashboard (🏘️ Suburban + 🌾 Rural / off-grid). [`web-litert/app.js`](web-litert/) ports `_extract_tool_calls` + `_parse_tool_args` from [`solarhive_inference.py`](solarhive_inference.py) Cell 4 line-for-line — same wrapped + bare regex fallback, same `<|"|>` string-arg delimiters with `re.DOTALL` semantics (JS dotall flag), same negative-number / boolean / null type coercion. The on-device `runAgenticLoop()` runs up to 3 rounds calling `get_solar_production` (Open-Meteo, keyless, CORS-friendly — same `SYSTEM_EFF=0.85` factor and Fahrenheit-threshold-77 temperature derating as the Python canonical) and `get_battery_state` (session simulator with `random.uniform(55, 85)` initial SOC matching `_BatterySimulator`). **Numerically equivalent outputs** to the cloud + hub variants for these two tools — one agentic-loop semantics, two edge runtimes (browser via MediaPipe Tasks Web, native via LiteRT-LM Python). Keyed tools (`get_weather` / OWM, `get_grid_status` / EIA, `get_nrel_pvwatts_baseline` / NREL) route to the microgrid hub via the 📡 escalation emoji where keys live server-side; **no API keys ever appear in browser source**. The shared emoji vocabulary mirrors the Cactus Flutter app at [`mobile-cactus/`](../mobile-cactus/) — one UX surface, two complementary edge runtimes (Cactus on mobile ARM, LiteRT on browser + Python edge).
+
+**Citation.** Per the [LiteRT homepage](https://ai.google.dev/edge/litert), [LiteRT-LM repository](https://github.com/google-ai-edge/LiteRT-LM), and the April 2, 2026 Google Developers Blog:
+
+```
+LiteRT — Google AI Edge:           https://ai.google.dev/edge/litert
+LiteRT-LM (runtime + landing):     https://ai.google.dev/edge/litert-lm
+LiteRT-LM repository:              https://github.com/google-ai-edge/LiteRT-LM
+ai-edge-torch (converter):         https://github.com/google-ai-edge/ai-edge-torch
+MediaPipe LLM Inference (docs):    https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference
+MediaPipe LLM Inference (Web):     https://ai.google.dev/edge/mediapipe/solutions/genai/llm_inference/web_js
+mediapipe-samples (codelabs):      https://github.com/google-ai-edge/mediapipe-samples
+litert-community model bundles:    https://huggingface.co/litert-community
+Pre-converted Gemma 4 E4B bundle:  https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm
+Apr 2, 2026 Google Developers Blog "Bring state-of-the-art agentic skills to the edge with Gemma 4":
+  https://developers.googleblog.com/bring-state-of-the-art-agentic-skills-to-the-edge-with-gemma-4/
 ```
 
 ---
@@ -907,6 +997,30 @@ A4B's (d) response on the AQI probe disclaims explicitly: *"I don't have a dedic
 
 **Honest finding for deployment:** E4B regresses on (c) compared to A4B by **−1/3 W2C** consistently across the family. This is consistent with the paper's documented size-vs-refusal scaling — smaller models with less reasoning depth more readily auto-fill missing parameters when they should ask back. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's *follow-up clarification* example count (currently 6) and *unable-to-answer* count (currently 10) to close the gap.
 
+#### Caveat — Multi-Token Prediction (MTP) drafters: I haven't integrated them yet, but I plan to in a future iteration
+
+> *🎂 Quick note: May 5, 2026 happens to be my birthday. So when Google announced "MTP drafters for Gemma 4" that morning, it landed like an unusually well-timed birthday gift — but the same timing also explains this caveat. I'd already finished my final inference run before the drafters dropped, so I'm treating MTP integration as a deliberate next iteration rather than folding it back into the submission's measured numbers.*
+
+**What is speculative decoding?** Standard transformer decoding runs serially — generating *K* tokens takes *K* sequential forward passes through the target model, each one waiting on the last. Leviathan, Kalman & Matias (2023, [arXiv:2211.17192](https://arxiv.org/abs/2211.17192)) introduced *speculative decoding* to break that serial chain without changing the output distribution. A much smaller "drafter" model M<sub>q</sub> generates γ candidate tokens autoregressively in roughly the time the target M<sub>p</sub> would take to produce one; the target then verifies *all* γ candidates in a **single parallel forward pass**. The algorithm keeps every accepted candidate, and if any get rejected it resamples that one position from a corrected distribution using the paper's *speculative sampling* procedure. The math guarantees the output distribution stays **identical** to standard decoding — no quality loss, just speedup. The original paper reports **2X–3X walltime speedup on T5-XXL** with bit-identical outputs.
+
+Here's the intuition I keep in mind: large-model inference usually bottlenecks on memory bandwidth, not compute, so spare flops sit idle on most steps. The drafter spends those flops productively — it trades a small extra compute budget for much better serial throughput. For the tokens that are easy to predict (which is most of them), the drafter and target agree, and I land many tokens per target call.
+
+**What Google shipped on May 5, 2026.** [*"Accelerating Gemma 4: faster inference with multi-token prediction drafters"*](https://blog.google/innovation-and-ai/technology/developers-tools/multi-token-prediction-gemma-4/) (Olivier Lacombe, Maarten Grootendorst). Google published paired drafter checkpoints for Gemma 4 E2B, E4B, 26B-A4B, and 31B using the canonical naming convention `<target>-assistant` — so the drafter that pairs with my cloud target `google/gemma-4-26B-A4B-it` is `google/gemma-4-26B-A4B-it-assistant`. Google reports speedups of **up to 3× decode with no quality degradation**, and **~2.2× on Apple Silicon** at batch sizes 4–8, measured across LiteRT-LM, MLX, Hugging Face Transformers, and vLLM. The drafters share the input embedding table with the target, which is what keeps them lightweight and pushes the acceptance rate high.
+
+**HF Transformers integration costs me one extra kwarg** (per the [implementation guide](https://ai.google.dev/gemma/docs/mtp/mtp)):
+
+```python
+target_model = AutoModelForCausalLM.from_pretrained("google/gemma-4-26B-A4B-it", ...)
+assistant_model = AutoModelForCausalLM.from_pretrained("google/gemma-4-26B-A4B-it-assistant", ...)
+target_model.generate(**inputs, assistant_model=assistant_model)  # MTP enabled
+```
+
+I can also tune two optional knobs: `num_assistant_tokens` (the γ parameter from the paper) and `num_assistant_tokens_schedule = "heuristic" | "constant"` for dynamic adjustment. The `"heuristic"` schedule increases γ by 2 when the target accepts every draft token and decreases by 1 whenever it rejects any — a runtime adaptation that maps directly to the paper's Section 3.5 suggestion of varying γ during inference.
+
+**What my final inference run measured — and what it didn't.** I completed both the cloud transformers benchmarks above (5 variants on Colab Pro G4) and the GGUF Ollama benchmark (Surface Pro 8) before May 5. They capture **standard autoregressive decoding only** — no MTP. The decode latency I reported (2–6 s/answer on E4B GGUF; comparable on the cloud A4B variants) is the no-drafter baseline. With paired drafters I'd expect the same measurements to land **2X–3X faster on the cloud A4B path** and proportionally faster on the E4B path, with bit-identical outputs.
+
+**Future iteration.** I shipped the MTP integration as a gated cell (`§14`, `_RUN_MTP_DEMO = False`) in [`solarhive_inference.py`](solarhive_inference.py) so reviewers can audit and reproduce the path, but I deliberately kept it out of the measured benchmark numbers above. In a post-submission iteration I'll re-run §13 with the drafter paired in — one extra `from_pretrained` for the assistant model plus the `assistant_model=` kwarg — and report side-by-side decode-tps / acceptance-rate / α numbers directly comparable to the original paper's Table 2. The cross-runtime story interests me too: HF Transformers gives me the documented path today; LiteRT-LM, MLX, and vLLM all appear in Google's tested-runtimes list, but their public APIs for paired drafters are still landing. My cloud tier (Colab Pro G4 + HF Transformers + Gemma 4 26B A4B) is the most directly addressable target.
+
 #### Run-history archive
 
 The full execution notebooks (cell-by-cell outputs from the runs that produced the benchmark numbers above) are preserved in [`archive/final_run/`](archive/final_run/) for reproducibility audit:
@@ -917,6 +1031,7 @@ The full execution notebooks (cell-by-cell outputs from the runs that produced t
 | [`2_solarhive_finetune_finalrun_Apr2026.ipynb`](archive/final_run/2_solarhive_finetune_finalrun_Apr2026.ipynb) | Dual fine-tune execution log — 26B A4B + E4B Unsloth LoRA training on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell 102 GB total / 94.97 GB max usable per Unsloth), converged loss + step-by-step training output |
 | [`3_solarhive_inference_finalrun_May2026.ipynb`](archive/final_run/3_solarhive_inference_finalrun_May2026.ipynb) | Multi-variant cloud inference run — 5 transformers variants (A4B LoRA / E4B LoRA / A4B+E4B merged / A4B NF4) on Colab Pro G4 with the 10-question parity benchmark; When2Call probes directly measured on A4B LoRA (3/3) and E4B merged (2/3 side-experiment), other variants inferred via lossless equivalence (see audit table above) |
 | [`4_solarhive_e4b_cactus_finalrun_May2026.ipynb`](archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb) | Cactus mobile-runtime conversion log — `cactus convert ... --precision INT4` on Colab Pro CPU + High-RAM produces a 6.94 GB INT4 multimodal artifact (audio Conformer + vision encoder retained FP16) with CosSim 0.9946 / SNR 19.8 dB / MSE 5.18e-04 fidelity. Build step + Python SDK smoke test gracefully skip on the x86 host (Cactus C++ engine is ARM-only by design); deployable to the Flutter Android companion app |
+| [`5_solarhive_e4b_litert_finalrun_May2026.ipynb`](archive/final_run/5_solarhive_e4b_litert_finalrun_May2026.ipynb) | LiteRT-LM Python runtime demo — loads the upstream pre-converted base Gemma 4 E4B `.litertlm` (3.66 GB, downloaded in 22.5s) from [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm), Engine cold-start 15.32s, warmup TTFT 2.63s. **Q&A 8/8** with **9/9 native curly-wrapped tool calls (0 parens drift)**, decode 8.29 tok/s on Colab x86_64 CPU (median over the 8-prompt benchmark — 2.6× headroom above the model card's published Pi 5 16GB CPU ARM number of 3.2 tok/s). MTP probe graceful-skips with the architecturally correct *"drafter pairing required"* message; VQA graceful-skips on auth (sky-photo dataset private until submission); When2Call 1/3 raw, functionally 2/3 (probe (d) refusal correct but scorer keyword list missed *"do not"*). Validates the LiteRT-LM cross-platform contract on x86 Linux as a proxy for the Android Kotlin / iOS C++ / Pi 5 / Jetson / laptop deployment matrix. |
 
 For the 6th deployment variant (local-laptop CPU GGUF via Ollama), see [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py) at the project root — a runnable pytest harness that produces the GGUF benchmark + an auto-generated MD report when run against a local Ollama instance.
 

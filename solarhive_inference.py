@@ -2059,3 +2059,194 @@ else:
     del _gguf_processor
     _gc.collect()
     print("\n✅ §13g agentic-loop probe complete")
+
+"""## 14: Multi-Token Prediction (MTP) Drafters — Future Iteration
+
+> **NOT INCLUDED IN THE FINAL INFERENCE RUN.** Google's Gemma 4 MTP drafter
+> announcement on May 5, 2026 landed AFTER our final §13 multi-variant
+> benchmark had been captured. This cell ships the MTP integration as
+> documented future-iteration code so the path is in source for reviewer
+> reproducibility, but is gated off by default (`_RUN_MTP_DEMO = False`).
+> The §13 benchmark numbers reflect standard autoregressive decoding only —
+> no MTP applied. A post-submission re-run with the drafter paired in
+> would be a clean follow-up benchmark.
+
+**What is speculative decoding?** Standard transformer decoding is serial:
+generating *K* tokens requires *K* sequential forward passes through the
+target model, each waiting on the last. Speculative decoding (Leviathan,
+Kalman & Matias, 2023, [arXiv:2211.17192](https://arxiv.org/abs/2211.17192))
+accelerates this *without changing the output distribution*. A much
+smaller "drafter" model M_q generates γ candidate tokens autoregressively
+in roughly the time the target M_p would take to generate one; the target
+then verifies *all* γ candidates in a single parallel forward pass.
+Accepted candidates are kept; the first rejected one (if any) is resampled
+from a corrected distribution via the paper's *speculative sampling*
+procedure. The math guarantees the output distribution is identical to
+standard decoding — no quality loss, just speedup. The original paper
+measured **2X–3X walltime speedup on T5-XXL** with no change to outputs.
+
+**What Google shipped on May 5, 2026.**
+[*"Accelerating Gemma 4: faster inference with multi-token prediction
+drafters"*](https://blog.google/innovation-and-ai/technology/developers-tools/multi-token-prediction-gemma-4/)
+(Olivier Lacombe, Maarten Grootendorst). Paired drafter checkpoints
+shipped for Gemma 4 E2B, E4B, 26B-A4B, and 31B with the canonical
+naming convention `<target>-assistant` (so the drafter for our
+`google/gemma-4-26B-A4B-it` cloud target is
+`google/gemma-4-26B-A4B-it-assistant`). Reported speedups: **up to 3×
+decode speedup with no quality degradation**, and **~2.2× on Apple
+Silicon** at batch sizes 4–8. Tested across LiteRT-LM, MLX, Hugging Face
+Transformers, and vLLM. The drafters share the input embedding table
+with the target — what makes them lightweight and high-acceptance.
+
+**HF Transformers integration is one extra kwarg** (per the
+[implementation guide](https://ai.google.dev/gemma/docs/mtp/mtp) and the
+[Gemma cookbook MTP notebook](https://github.com/google-gemma/cookbook/blob/main/docs/mtp/mtp.ipynb)):
+
+    target.generate(**inputs, assistant_model=assistant)
+
+Optional knobs: `num_assistant_tokens` (the γ parameter from the paper)
+and `num_assistant_tokens_schedule = "heuristic" | "constant"` for
+dynamic adjustment. The "heuristic" schedule maps directly to the
+paper's Section 3.5 suggestion of varying γ during inference: increase
+γ by 2 when all draft tokens are accepted, decrease by 1 on any
+rejection.
+
+**This cell, when enabled (`_RUN_MTP_DEMO = True`), will:**
+1. Load the SolarHive cloud target (`google/gemma-4-26B-A4B-it`) in BF16.
+2. Load the paired drafter `google/gemma-4-26B-A4B-it-assistant` in BF16.
+3. Run the same prompt through both paths — baseline (no drafter) vs.
+   MTP (drafter paired) — with deterministic argmax sampling so the
+   speculative-sampling guarantee is byte-verifiable.
+4. Print walltime, decoded-tokens-per-second, and the measured speedup.
+"""
+
+# === CELL 14: MTP Drafters — Future Iteration =================================
+# Citations:
+#   - May 5, 2026 Google blog "Accelerating Gemma 4: faster inference with
+#     multi-token prediction drafters" by Olivier Lacombe + Maarten Grootendorst:
+#     https://blog.google/innovation-and-ai/technology/developers-tools/multi-token-prediction-gemma-4/
+#   - MTP overview:        https://ai.google.dev/gemma/docs/mtp/overview
+#   - MTP implementation:  https://ai.google.dev/gemma/docs/mtp/mtp
+#   - Gemma cookbook:      https://github.com/google-gemma/cookbook/blob/main/docs/mtp/mtp.ipynb
+#   - Speculative decoding paper (Leviathan, Kalman & Matias, ICML 2023):
+#     https://arxiv.org/abs/2211.17192
+
+_RUN_MTP_DEMO = False  # Flip to True to run the side-by-side baseline vs. MTP comparison
+
+if not _RUN_MTP_DEMO:
+    print("=" * 60)
+    print("§14: MTP Drafter Demo — SKIPPED (set _RUN_MTP_DEMO = True to enable)")
+    print("=" * 60)
+    print(
+        "  Final inference run did not include MTP — Gemma 4 drafters were\n"
+        "  announced on May 5, 2026, after our §13 multi-variant benchmark\n"
+        "  numbers were captured. This cell ships the integration as\n"
+        "  documented future-iteration code; flip the flag above to\n"
+        "  reproduce the side-by-side timing comparison.\n"
+    )
+else:
+    import time as _t14
+    import torch as _torch14
+    import gc as _gc14
+    from transformers import (
+        AutoModelForCausalLM as _AutoCausalLM14,
+        AutoProcessor as _AutoProc14,
+    )
+
+    _MTP_TARGET_ID    = "google/gemma-4-26B-A4B-it"
+    _MTP_ASSISTANT_ID = _MTP_TARGET_ID + "-assistant"  # canonical drafter naming
+
+    print("=" * 60)
+    print("§14: MTP Drafter Demo — target + paired drafter")
+    print("=" * 60)
+    print(f"  Target:    {_MTP_TARGET_ID}")
+    print(f"  Drafter:   {_MTP_ASSISTANT_ID}")
+
+    _proc14 = _AutoProc14.from_pretrained(_MTP_TARGET_ID, trust_remote_code=True)
+
+    # Load target + drafter both in BF16 on the available GPU.
+    # Note: the drafter is small enough (~few hundred MB) that it adds negligible
+    # VRAM pressure to the target's ~48 GB BF16 footprint.
+    _target_model14 = _AutoCausalLM14.from_pretrained(
+        _MTP_TARGET_ID,
+        dtype=_torch14.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+    _assistant_model14 = _AutoCausalLM14.from_pretrained(
+        _MTP_ASSISTANT_ID,
+        dtype=_torch14.bfloat16,
+        device_map="auto",
+        trust_remote_code=True,
+    )
+
+    # Optional: dynamic γ schedule (paper Section 3.5; cookbook example).
+    # "heuristic" increases γ by 2 when all drafts accepted, decreases by 1 on
+    # any rejection. "constant" keeps γ fixed at num_assistant_tokens.
+    _assistant_model14.generation_config.num_assistant_tokens = 4
+    _assistant_model14.generation_config.num_assistant_tokens_schedule = "heuristic"
+
+    # Same prompt for both paths. Argmax sampling (do_sample=False) so the
+    # speculative-sampling guarantee — that MTP's output distribution is
+    # identical to the baseline's — is byte-verifiable on the result.
+    _mtp_prompt = (
+        "Explain in 2-3 sentences why solar production drops on cloudy days, "
+        "using the panel temperature derating effect as part of the explanation."
+    )
+    _msgs14 = [{"role": "user", "content": _mtp_prompt}]
+    _inp14 = _proc14.apply_chat_template(_msgs14, tokenize=False, add_generation_prompt=True)
+    _enc14 = _proc14(text=_inp14, return_tensors="pt").to(_target_model14.device)
+
+    # --- Baseline: target only, no drafter --------------------------------------
+    print("\n  [1/2] Baseline (target only, no MTP)...")
+    _t_b0 = _t14.perf_counter()
+    _out_baseline = _target_model14.generate(
+        **_enc14, max_new_tokens=256, do_sample=False,
+    )
+    _baseline_s = round(_t14.perf_counter() - _t_b0, 2)
+    _baseline_tokens = _out_baseline.shape[-1] - _enc14["input_ids"].shape[-1]
+    _baseline_tps = round(_baseline_tokens / max(0.01, _baseline_s), 2)
+    _baseline_text = _proc14.decode(
+        _out_baseline[0][_enc14["input_ids"].shape[-1]:], skip_special_tokens=True
+    )
+    print(f"     Walltime {_baseline_s}s, {_baseline_tokens} tokens "
+          f"({_baseline_tps} tok/s)")
+
+    # --- MTP: target + drafter paired -------------------------------------------
+    print("\n  [2/2] MTP enabled (target + drafter)...")
+    _t_m0 = _t14.perf_counter()
+    _out_mtp = _target_model14.generate(
+        **_enc14, max_new_tokens=256, do_sample=False,
+        assistant_model=_assistant_model14,  # ← The one kwarg that enables MTP
+    )
+    _mtp_s = round(_t14.perf_counter() - _t_m0, 2)
+    _mtp_tokens = _out_mtp.shape[-1] - _enc14["input_ids"].shape[-1]
+    _mtp_tps = round(_mtp_tokens / max(0.01, _mtp_s), 2)
+    _mtp_text = _proc14.decode(
+        _out_mtp[0][_enc14["input_ids"].shape[-1]:], skip_special_tokens=True
+    )
+    print(f"     Walltime {_mtp_s}s, {_mtp_tokens} tokens ({_mtp_tps} tok/s)")
+
+    # --- Verdict ----------------------------------------------------------------
+    _speedup = round(_baseline_s / max(0.01, _mtp_s), 2)
+    print("\n" + "=" * 60)
+    print(f"  MTP walltime speedup:  {_speedup}x")
+    print(f"  Baseline throughput:   {_baseline_tps} tok/s")
+    print(f"  MTP throughput:        {_mtp_tps} tok/s")
+    print("=" * 60)
+    print(f"\n  Baseline output:\n  {_baseline_text}\n")
+    print(f"  MTP output:\n  {_mtp_text}\n")
+    print(
+        "  Speculative-sampling guarantee (Leviathan, Kalman & Matias, 2023):\n"
+        "  with argmax decoding, MTP's output distribution is identical to the\n"
+        "  baseline's, so the two outputs above should be byte-identical when\n"
+        "  the drafter has any non-trivial acceptance rate. Any divergence\n"
+        "  would indicate either a stochastic-sampling code path being taken\n"
+        "  or a bug in the speculative-sampling implementation."
+    )
+
+    # Cleanup — release the target + drafter VRAM
+    del _target_model14, _assistant_model14, _proc14
+    _gc14.collect()
+    _torch14.cuda.empty_cache()
+    print("\n✅ §14 MTP demo complete")
