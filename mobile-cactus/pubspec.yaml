@@ -1,0 +1,74 @@
+# SolarHive — Cactus Flutter Mobile App (mobile-cactus/)
+#
+# Loads the converted SolarHive E4B Cactus INT4 multimodal artifact at first
+# launch and runs on-device inference via the Cactus Flutter SDK on Android
+# (primary target) and iOS.
+#
+# Companion to:
+#   - solarhive_e4b_cactus.ipynb           (the convert + smoke-test notebook)
+#   - Truthseeker87/solarhive-e4b-cactus   (the HF repo this app downloads from)
+#   - solarhive_e4b_litert_v3.1.ipynb      (LiteRT-LM Python alternative)
+#   - web-litert/                          (LiteRT browser companion)
+
+name: mobile_cactus
+description: SolarHive Cactus mobile app — on-device Gemma 4 E4B inference via the Cactus Flutter SDK with a multi-turn chat UI.
+version: 0.1.0
+publish_to: 'none'
+
+environment:
+  sdk: ">=3.4.0 <4.0.0"
+  flutter: ">=3.22.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # NO pub.dev cactus dependency.
+  #
+  # cactus 1.3.0 (latest pub.dev release, Jan 2026) is 4 months older than
+  # the cactus@main converter that produced our Truthseeker87/solarhive-e4b-cactus
+  # artifact. Its libcactus.so cannot read main-format weights — the
+  # in-app cactus_init reports "File corrupted: insufficient data for
+  # header with 1413693763 dimensions" because the file-header schema
+  # drifted between releases.
+  #
+  # Instead we vendor a self-built libcactus.so for arm64-v8a from
+  # cactus-compute/cactus commit d917981f, dropped at:
+  #   android/app/src/main/jniLibs/arm64-v8a/libcactus.so
+  # Build recipe: clone cactus@main with submodules, run android/build.sh
+  # via NDK cross-compile (Android NDK 28.2, cmake 3.22.1 with Ninja
+  # generator). Builds in ~3 min on any host with the NDK installed.
+  #
+  # The matching Dart FFI bindings live at lib/cactus.dart, copied
+  # verbatim from the same commit's flutter/cactus.dart. cactus.dart
+  # self-contains its calloc/Utf8 helpers, so we don't need package:ffi
+  # either.
+  #
+  # main consolidated libcactus_util.so into libcactus.so (register_app
+  # and friends are now in the main library), so we don't need a separate
+  # util binary.
+
+  # HuggingFace Hub artifact download (first-launch streaming + progress).
+  # SolarHive's `Truthseeker87/solarhive-e4b-cactus` is a third-party
+  # finetune outside Cactus's `Cactus-Compute/` curated org, so we ship our
+  # own arbitrary-HF-repo downloader via dio.
+  dio: ^5.4.0
+
+  # App-local persistent storage for the downloaded artifact directory.
+  path_provider: ^2.1.0
+
+  # Material 3 UI primitives (chat bubbles, send button, progress indicators).
+  cupertino_icons: ^1.0.6
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+  # Integration test driver — required for `flutter test integration_test/`.
+  # Unit + widget tests under `test/` use only `flutter_test` above.
+  integration_test:
+    sdk: flutter
+
+flutter:
+  uses-material-design: true

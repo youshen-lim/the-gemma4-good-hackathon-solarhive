@@ -1,0 +1,30 @@
+# Flutter / Dart standard ignores
+.dart_tool/
+.flutter-plugins
+.flutter-plugins-dependencies
+.packages
+.pub-cache/
+.pub/
+build/
+ios/Pods/
+.flutter-plugins
+.flutter-plugins-dependencies
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.ipr
+*.iws
+
+# Misc
+.DS_Store
+*.log
+*.swp
+
+# Built APKs / app bundles — built locally, not committed
+**/*.apk
+**/*.aab
+
+# Locally-cached Cactus artifact (downloaded at first launch; do NOT commit)
+**/solarhive-e4b-cactus/
