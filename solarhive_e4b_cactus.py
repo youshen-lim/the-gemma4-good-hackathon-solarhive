@@ -1,55 +1,166 @@
 # -*- coding: utf-8 -*-
-"""SolarHive — Fine-tuned Gemma 4 E4B → Cactus Mobile Deployment Notebook
-========================================================================
+"""SolarHive — Cactus Mobile-First Edge Runtime Notebook
+=========================================================
 SolarHive is an open-source intelligence layer designed to coordinate
 community microgrids & community-based storage via fuel cells, pool
 midday energy surplus across these microgrids, and eliminate stranded
 capacity. It also helps forecast solar irradiance and cloud cover to
 plan ahead.
 
-PURPOSE: Convert the fine-tuned Gemma 4 E4B merged safetensors to Cactus's
-INT4 mobile deployment format, then smoke-test the artifact via the Cactus
-Python SDK with SolarHive emoji-format prompts. The output artifact is
-consumed by the companion Flutter Android app for on-device inference.
+PURPOSE: Demonstrate Cactus — *"a low-latency AI engine for mobile
+devices & wearables"* per the
+[Cactus repository](https://github.com/cactus-compute/cactus), powered
+by the *"Cactus Engine. The fastest on-device runtime."* per the
+[Cactus engine page](https://cactuscompute.com/#engine) — as the
+mobile-first on-device runtime for SolarHive's fine-tuned Gemma 4 E4B.
+Convert the SolarHive LoRA-merged BF16 safetensors into a Cactus INT4
+multimodal artifact, inspect Cactus's per-tensor quantization fidelity,
+and validate the artifact end-to-end on the Cactus Python SDK. The
+output artifact is consumed by the companion Flutter Android app for
+on-device inference on ARM hardware (Apple Silicon, iPhone, iPad,
+Vision Pro, Android, Raspberry Pi 5), with hardware acceleration
+through integrated mobile NPUs (Apple Neural Engine, Qualcomm Hexagon,
+MediaTek / Exynos APU).
 
-Pipeline:
-    Truthseeker87/solarhive-e4b-ollama (BF16 safetensors, ~16 GB)
-                ↓ cactus convert --precision INT4
-    /content/solarhive-e4b-cactus (INT4 multimodal artifact, ~7 GB)
-                ↓ Cactus Python SDK + 10 SolarHive prompts (ARM hosts)
-    Three-outcome verdict — ship / iterate / fall back to base E4B
+ALTERNATIVE TO LITERT-LM: This notebook is the Cactus-based mobile
+deployment of SolarHive's fine-tune. Both Cactus and LiteRT-LM target
+the same edge-inference use case (a phone, microgrid hub, or single-
+board computer running Gemma 4 E4B locally), and both pair with the
+SolarHive cloud tier (Gemma 4 26B A4B) and microgrid-hub tier (Ollama
+on E4B GGUF) via emoji-routed task handoff. The asymmetry is on the
+model side: the Cactus tier deploys the SolarHive **fine-tune** end-to-
+end (LoRA-merged BF16 → INT4 multimodal via `cactus convert`), while
+the LiteRT-LM tier deploys the upstream pre-converted base bundle. The
+LiteRT-LM Python runtime demo lives at `solarhive_e4b_litert_v3.1.ipynb`
+in this repository; the LiteRT browser companion at `web-litert/`
+covers the WebGPU leg of the same edge-inference story.
 
-SETUP: Google Colab Pro CPU + High-RAM runtime (~25 GB system RAM
-       recommended). No GPU required — Cactus convert is CPU-bound.
-       Convert step takes ~5-15 min on Colab CPU+High-RAM.
+Features:
+  1. Cactus convert pipeline — `cactus convert <model> --precision INT4`
+     produces a deployable INT4 multimodal artifact (text weights INT4-
+     quantized; vision encoder + audio Conformer retained FP16) suitable
+     for the Cactus Flutter SDK, with an explicit Gemma 4 multimodal
+     code path (the converter logs *"Normalized gemma4 audio tower key
+     naming for conversion"* during the run)
+  2. Fine-tuned source — consumes
+     [`Truthseeker87/solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)
+     (the LoRA-merged BF16 safetensors, ~16 GB) so the deployable mobile
+     artifact carries SolarHive's domain expertise end-to-end. Companion
+     LoRA-only adapters at
+     [`Truthseeker87/solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora)
+     for users who want to merge inline at convert time
+  3. Cactus Python SDK smoke test — 10 SolarHive prompts split into a
+     Class A standard Q&A set (5 domain probes that test whether the
+     fine-tuned domain knowledge survived INT4 quantization) and a
+     Class B emoji-format set (5 prompts validating the strict
+     `[1-2 emojis] [imperative <15 words]` shape the mobile UI parser
+     depends on)
+  4. Three-outcome quality verdict — Class A ≥4/5 coherent + Class B
+     ≥3/5 well-formed → ship; Class A ≥4/5 only → iterate the system
+     prompt; Class A <4/5 → fall back to base E4B
+  5. Host-architecture gate — `_IS_ARM_HOST` runtime detection lets the
+     same notebook run end-to-end on ARM hosts (Apple Silicon Mac, Pi 5,
+     ARM cloud, Android emulator via QEMU) and convert-only on x86
+     development hosts (Colab, AWS x86, GCP x86) without errors. The
+     Cactus C++ engine targets ARM by design (per the verbatim blog
+     statement quoted in SETUP below)
+  6. Quantization fidelity reporting — Cactus's converter logs MSE / SNR
+     / CosSim per-tensor metrics plus an aggregate; the verdict block
+     surfaces those numbers so reviewers can audit INT4 quality without
+     re-running the convert step
+  7. Three-tier task routing aligned with Cactus's hybrid-inference
+     pattern (the [Cactus homepage](https://cactuscompute.com/) tagline
+     *"On-device AI with cloud fallback"* / *"Hybrid inference for
+     modern applications"* maps directly onto SolarHive's emoji-routed
+     handoff). Keyed-API queries (OWM / EIA / NREL) emit the 📡 routing
+     emoji and escalate to the microgrid hub where keys live server-
+     side. Heavy reasoning emits 🛰️ to the cloud tier (Gemma 4 26B A4B
+     HF Space). Panel-photo VQA emits 🔬 to the cloud
+  8. Companion mobile app — the Flutter Android app at `mobile-cactus/`
+     loads the artifact via the Cactus Flutter SDK and runs the on-
+     device quality gate (Class A ≥4/5 + Class B ≥3/5) on real ARM
+     hardware
 
-       The Cactus runtime targets ARM platforms (Apple Silicon, iOS,
-       Android, ARM64 Linux) — see the official Cactus Gemma 4 deployment
-       blog at https://docs.cactuscompute.com/v1.14/blog/gemma4/. On x86
-       development hosts the convert step still produces a deployable
-       artifact that the mobile app loads on-device; the Python SDK smoke
-       test runs on ARM hosts (Android emulator, Apple Silicon Mac,
-       ARM cloud, Pi 5). The notebook detects the host architecture and
-       gracefully skips ARM-only steps on x86.
+SETUP: Google Colab Pro **CPU + High-RAM** (Linux x86_64). The CPU
+choice is intentional — Cactus convert is CPU-bound by design (per the
+official Cactus benchmarks page header *"Benchmarks (CPU-only, no
+GPU)"*) and the runtime has no CUDA / NVIDIA / ROCm / OpenCL
+acceleration path; mobile-NPU acceleration (Apple Neural Engine,
+Qualcomm Hexagon, MediaTek / Exynos APU) handles inference on the
+ARM deployment surface. High-RAM (~25 GB on Colab Pro CPU) is needed
+to load and convert the ~16 GB fine-tuned BF16 safetensors without
+OOM. Convert step runs in ~5-15 min.
 
-PRIZE TARGET: Cactus Special Technology Track
+The Cactus runtime targets ARM platforms (Apple Silicon Macs, iPhones,
+iPads, Vision Pro, Android, ARM64 Linux including Raspberry Pi 5) — per
+the [official Cactus Gemma 4 deployment blog](https://docs.cactuscompute.com/v1.14/blog/gemma4/),
+verbatim: *"Cactus targets ARM across platforms: Apple Silicon Macs,
+iPhones, iPads, Vision Pro, and Android devices with ARM64 chipsets."*
+On x86 development hosts the convert step still produces a deployable
+artifact that the mobile app loads on-device; `cactus build --python`
+and the Python SDK smoke test gracefully skip on x86 via the
+`_IS_ARM_HOST` gate. On ARM hosts (Apple Silicon Mac, Pi 5, ARM cloud,
+Android emulator) the same notebook executes the build + smoke test +
+3-outcome verdict end-to-end.
+
+Use cases the deployable artifact enables:
+  - **On-device phone inference** — Apple iPhone / iPad, Android phones
+    and tablets via the Cactus Flutter SDK, with NPU acceleration on
+    supported SoCs and zero data leaving the device
+  - **Wearable inference** — Apple Vision Pro and Apple Silicon Mac via
+    the same Cactus Apple build target
+  - **Single-board edge** — Raspberry Pi 5 16 GB and similar ARM64
+    Linux hardware suitable for SolarHive's microgrid hub deployment
+    pattern
+  - **Air-gapped / offline / low-connectivity** — the artifact is self-
+    contained on the device after a one-time download; subsequent
+    queries never need a network round trip
+  - **Privacy-by-construction community deployments** — the SolarHive
+    fine-tune runs locally so household energy data, panel photos,
+    and grid-coordination conversations stay in the neighborhood
 
 Gemma is a trademark of Google LLC.
+PRIZE TARGET: Cactus Special Technology Track
 
 References:
-- Cactus repository + supported-models table:
-  https://github.com/cactus-compute/cactus
-- Cactus convert CLI: `cactus convert <model> [dir] --precision INT4|INT8|FP16`
-- Cactus Flutter SDK: https://pub.dev/packages/cactus
-- Companion notebooks:
-    solarhive_finetune.py     — produces the LoRA adapters
-    solarhive_merge_e4b.py    — merges LoRA + base to BF16 safetensors
-                                 published as Truthseeker87/solarhive-e4b-ollama
-                                 (the source artifact this notebook consumes)
-    solarhive_inference.py    — defines the SolarHive prompt set reused
-                                 for the Class A / Class B smoke-test verdict
+  - Cactus Compute homepage:
+      https://cactuscompute.com/
+  - Cactus repository (canonical source + supported-models table):
+      https://github.com/cactus-compute/cactus
+  - Cactus documentation:
+      https://docs.cactuscompute.com/latest/
+  - Cactus Gemma 4 deployment blog (defines the ARM-targeted scope
+    statement quoted in the host-arch rationale above):
+      https://docs.cactuscompute.com/v1.14/blog/gemma4/
+  - Cactus Flutter SDK (the mobile companion's runtime dependency):
+      https://pub.dev/packages/cactus
+  - SolarHive fine-tuned merged BF16 safetensors — the convert source
+    (LoRA-merged via Unsloth `save_pretrained_merged`):
+      https://huggingface.co/Truthseeker87/solarhive-e4b-ollama
+  - SolarHive LoRA-only adapter weights (alternative path for inline
+    LoRA + base merge at convert time):
+      https://huggingface.co/Truthseeker87/solarhive-e4b-lora
+  - SolarHive LiteRT-LM Python alternative — runs the upstream base
+    `.litertlm` bundle on Android Kotlin / iOS C++ / Linux Python:
+      `solarhive_e4b_litert_v3.1.ipynb` in this repository
+  - SolarHive LiteRT browser companion — `.task` bundle on WebGPU via
+    MediaPipe Tasks Web:
+      `web-litert/` in this repository
 
-## 0: Dependencies & cactus-compute install
+Citation (per the Cactus repository's recommended attribution):
+
+    @software{cactus,
+      title  = {Cactus: AI Inference Engine for Phones & Wearables},
+      author = {Ndubuaku, Henry and Cactus Team},
+      url    = {https://github.com/cactus-compute/cactus},
+      year   = {2025}
+    }
+
+Pipeline: Install cactus-compute -> resolve SolarHive fine-tuned merged
+         safetensors -> Cactus convert (INT4) -> inspect artifact +
+         quant fidelity -> (ARM hosts) Cactus Python SDK smoke test ->
+         three-outcome quality verdict -> ship to Flutter Android
+         companion at `mobile-cactus/`
 """
 
 """## 0: Install cactus-compute from GitHub + verification gate
@@ -854,3 +965,35 @@ else:
         print("  3. If base E4B passes Class A → ship the companion app with")
         print("     base E4B + SolarHive system prompts at runtime.")
         print("  4. If even base E4B fails on Class A → drop the Cactus track entirely.")
+
+"""## 7: Push converted artifact to HuggingFace
+
+Uploads the 6.94 GB Cactus INT4 multimodal artifact at `/content/solarhive-e4b-cactus/` to the canonical HF repo `Truthseeker87/solarhive-e4b-cactus`. Wall clock ~10-30 min on Colab Pro depending on bandwidth; the HF Hub progress bar streams to stdout. The four metadata files already on the repo (`.gitattributes`, `README.md` curated card, `LICENSE`, header image) are excluded via `ignore_patterns` so they don't get overwritten.
+"""
+
+from huggingface_hub import login, upload_folder, HfApi
+
+login(token=HF_TOKEN, add_to_git_credential=False)  # HF_TOKEN loaded in Cell 4
+
+upload_folder(
+    repo_id="Truthseeker87/solarhive-e4b-cactus",
+    repo_type="model",
+    folder_path="/content/solarhive-e4b-cactus/",
+    commit_message=(
+        "Upload Cactus INT4 multimodal artifact "
+        "(343 INT4 + 2 INT8 + 1,732 FP16; "
+        "CosSim 0.9946 / SNR 19.8 dB / MSE 5.18e-04)"
+    ),
+    ignore_patterns=[".*", "__pycache__", "*.pyc", "README.md", "LICENSE", "*.png", ".gitattributes"],
+)
+
+# Verify
+print()
+_files = HfApi().list_repo_files(repo_id="Truthseeker87/solarhive-e4b-cactus")
+_weights = sum(1 for _f in _files if _f.endswith(".weights"))
+print("remote total:", len(_files), "files | .weights:", _weights)
+print("expected: ~2,082 total | ~2,077 weights")
+if _weights >= 2000:
+    print("[OK] upload verified -- Phase 0.5 complete; Phase 1 Day 1 unblocked")
+else:
+    print("[WARN] weights count below 2,000 -- investigate before continuing")
