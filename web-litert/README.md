@@ -1,38 +1,49 @@
 # SolarHive — LiteRT Browser Demo
 
-On-device Gemma 4 E2B inference in the browser. Vanilla HTML/JS/CSS, no build
-step. Runs the upstream pre-converted `litert-community/gemma-4-E2B-it-litert-lm`
-`.task` bundle via MediaPipe LLM Inference Web on WebGPU.
+On-device Gemma 4 E4B inference in the browser. Vanilla HTML/JS/CSS, no build
+step. Runs the upstream pre-converted `litert-community/gemma-4-E4B-it-litert-lm`
+`.task` bundle via MediaPipe LLM Inference Web on WebGPU. **E4B chosen for
+variant consistency** — Cactus mobile, Ollama, llama.cpp all deploy the
+fine-tuned E4B; the LiteRT browser tier uses upstream-base E4B (no fine-tune
+because the public LiteRT conversion path doesn't yet ship a `gemma4` example
+module — see `litert_plan.md`) plus the SolarHive UX layer + on-device
+agentic loop on top.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `index.html` | Three-screen shell — onboarding, loading, chat |
+| `index.html` | Two-screen shell — loading, chat |
 | `styles.css` | Mobile-first dark theme (deep navy + sun yellow accents) |
-| `app.js` | MediaPipe loader · emoji parser · mode toggle · routing escalation |
+| `app.js` | MediaPipe loader · emoji parser · on-device agentic loop |
 
 ## How it works
 
-1. **First load** — user picks a mode (🏘️ Suburban for fixed roof panels,
-   🌾 Rural / off-grid for deployable panels). Choice persists to `localStorage`.
-2. **Model download** — MediaPipe Tasks GenAI fetches the ~2.6 GB `.task`
+1. **Model download** — MediaPipe Tasks GenAI fetches the ~2.96 GB `.task`
    bundle from the Hugging Face mirror. Browser caches it; subsequent loads
    are instant.
-3. **Inference** — every user query is wrapped in the mode-specific system
-   prompt and sent through `LlmInference.generateResponse()` on WebGPU.
-4. **Emoji parsing** — `parseEmojiResponse()` extracts the leading 1–2 emojis
+2. **Inference + on-device agentic loop** — every user query enters
+   `runAgenticLoop()` (up to 3 rounds). Base Gemma 4 E4B has [native function
+   calling](https://ai.google.dev/gemma/docs/core/model_card_4) (pre-trained,
+   not fine-tune-dependent). Two on-device tools execute via the loop —
+   `get_solar_production` (Open-Meteo realtime GHI, keyless, CORS-friendly)
+   and `get_battery_state` (session simulator). Numerically aligned with
+   `solarhive_inference.py` Cell 4 (SYSTEM_EFF=0.85, Fahrenheit-based
+   temperature derating, identical return shapes including `temp_derate_pct`,
+   `kwh_stored`, `charging`).
+3. **Emoji parsing** — `parseEmojiResponse()` extracts the leading 1–2 emojis
    and renders them at 96px. The remaining imperative sentence sits underneath.
-5. **Routing escalation** — if the model emits 🛰️, 📡, or 🔬, the UI surfaces
-   a one-tap button to escalate to the cloud (26B A4B) or microgrid hub
-   (Ollama on E4B). Three-tier task routing made explicit to the user.
+4. **Single unified interface for all user groups** — the browser companion
+   presents the same chat UI regardless of the user's solar deployment context
+   (rooftop-fixed, deployable, off-grid). Mode-driven system-prompt branching
+   is a future-roadmap item, retained for post-submission iteration.
 
-## System prompts
+## System prompt
 
-The two mode-specific prompts and the emoji vocabulary are defined in
+A single SolarHive system prompt and the emoji vocabulary are defined in
 `litert_plan.md` and inlined in `app.js` (see `systemPrompt()` and
-`EMOJI_SET`). Identical between this LiteRT browser app and the upcoming
-Cactus Flutter app — single source of UX truth across both edge runtimes.
+`EMOJI_SET`). Identical between this LiteRT browser app and the Cactus
+Flutter app — single source of UX truth across both edge runtimes.
 
 ## Browser support
 
@@ -76,16 +87,15 @@ license: apache-2.0
 ---
 ```
 
-## Known scope (Apr 28)
+## Known scope
 
-- ✅ Day 8–9: scaffold, onboarding, parser, chat shell
-- ⬜ Day 10–11: suburban dashboard with maintenance alerts row
-- ⬜ Day 12–13: rural action-card layout with countdown timers
-- ⬜ Day 14: parser hardening, HF Space deployment, demo GIFs
+- ✅ scaffold, parser, single unified chat shell
+- ⬜ parser hardening, HF Space deployment, demo GIFs
 
-This is the Day 8–9 scaffold. The shared chat shell already renders the
-emoji card the same way both modes will — Days 10–13 layer mode-specific
-secondary panels (maintenance row, action countdown) on top.
+The submission ships a single unified chat interface for all user groups.
+Mode-specific dashboards (maintenance-alert layout for rooftop-fixed,
+action-countdown layout for deployable / off-grid) are a future-roadmap
+item retained for post-submission iteration.
 
 ## Citations
 
