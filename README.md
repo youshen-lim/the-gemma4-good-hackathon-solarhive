@@ -514,19 +514,21 @@ that notebook is now runnable on a fresh Colab session.
 
 ### Feature 4 — Edge GGUF Deployment *(Ollama + llama.cpp Special Tech Tracks)*
 
-The fine-tuned E4B was quantized to two interchangeable Q4_K_M GGUF variants for Ollama / llama.cpp edge deployment. Both were inferenced on the **same** 16 GB Intel i5-1135G7 laptop CPU via Ollama 0.21.0 — confirming quantization-precision independence at the edge-inference target.
+The fine-tuned E4B was quantized to a standard Q4_K_M GGUF (Q6_K on the PLE tensor, Q4_K elsewhere) for Ollama / llama.cpp edge deployment, and inferenced on a 16 GB Intel i5-1135G7 laptop CPU via Ollama 0.21.0.
 
-| | PLE-Q4_0 (laptop quant) | Standard Q6_K-PLE (cloud quant) |
-|---|---|---|
-| GGUF size | **5.34 GB** | **5.34 GB** |
-| Quantization hardware | 16 GB laptop (`--tensor-type` PLE override) | High-RAM cloud notebook (llama.cpp default Q4_K_M) |
-| Inference hardware | 16 GB Intel i5 laptop CPU (same) | 16 GB Intel i5 laptop CPU (same) |
-| Domain Q&A (5 prompts) | **5/5 ✅** | **5/5 ✅** |
-| Tool calling (5 prompts) | **5/5 ✅** | **5/5 ✅** |
-| **Total project-held-out check** | **10/10** | **10/10** |
-| HF artifact | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m.gguf` | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m-standard.gguf` |
+| | SolarHive E4B Q4_K_M GGUF |
+|---|---|
+| GGUF size | **5.34 GB** (Q6_K-PLE) |
+| Quantization hardware | High-RAM cloud notebook (llama.cpp default Q4_K_M); 16 GB-laptop recipe below |
+| Inference hardware | 16 GB Intel i5 laptop CPU |
+| Domain Q&A (5 prompts) | **5/5 ✅** |
+| Tool calling (5 prompts) | **5/5 ✅** |
+| **Total project-held-out check** | **10/10** + 2/3 W2C |
+| HF artifact | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m.gguf` (and `…-standard.gguf`, same quant) |
 
-Both pair with the same 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 on the project-held-out set + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
+**Quantizing on a 16 GB laptop:** the standard Q4_K_M conversion needs a ~10.7 GB float32 buffer for the Q6_K PLE tensor and OOMs on 16 GB hardware. Adding `--tensor-type per_layer_token_embd.weight=q4_0` bypasses the buffer and yields a smaller (~4.3 GB) GGUF — validated quality-safe in development, provided as a reproducibility recipe rather than a separately-shipped artifact.
+
+It pairs with the 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 on the project-held-out set + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
 
 ### Feature 5 — Multi-Tier Hardware Deployment *(One fine-tune, five runtime targets)*
 
@@ -990,7 +992,7 @@ is the default load in the inference notebook and is benchmarked alongside the W
 Two independent benchmarking platforms cover all six deployment variants of the same SolarHive fine-tune:
 
 - **5 cloud transformers variants** were measured on Colab Pro G4 (NVIDIA RTX PRO 6000 Blackwell, 96 GB VRAM).
-- **1 GGUF variant** was measured locally on a CPU-only Microsoft Surface Pro 8 (11th-gen Intel Core i5-1135G7 @ 2.4 GHz, 16 GB RAM, Intel Iris Xe unused), with the 5.3 GB GGUF + Ollama blob cache stored on an external USB drive.
+- **1 GGUF variant** was measured locally on a CPU-only Microsoft Surface Pro 8 (11th-gen Intel Core i5-1135G7 @ 2.4 GHz, 16 GB RAM, Intel Iris Xe unused), with the 5.34 GB GGUF + Ollama blob cache stored on an external USB drive.
 
 Sampling defaults across all variants: `temperature=1.0, top_p=0.95, top_k=64` — [Unsloth-recommended](https://unsloth.ai/docs/models/gemma-4) Gemma 4 values.
 
