@@ -458,8 +458,8 @@ by free GPU VRAM at runtime.
 
 | Model | Converged Loss | Trainable Params | Initial 8-Q Benchmark | May 2026 Final Run | Time |
 |-------|---------------|-----------------|-----------------------|-------------------|------|
-| Gemma 4 26B A4B | **0.6956** | 505.4M / 26.3B (1.92%) | **8/8** (5/5 Q&A, 3/3 tool) | **9/10 + 3/3 W2C** (multi-variant 10-Q parity benchmark) | 7,198s |
-| Gemma 4 E4B | **0.9218** | 41.2M / 8.0B (0.51%) | **8/8** (5/5 Q&A, 3/3 tool) | **10/10 + 2/3 W2C** (LoRA + base, sole 10/10 winner) | 420s |
+| Gemma 4 26B A4B | **0.6956** | 505.4M / 26.3B (1.92%) | **8/8** (5/5 Q&A, 3/3 tool) | **9/10 + 3/3 W2C** (project-held-out 10-Q parity check) | 7,198s |
+| Gemma 4 E4B | **0.9218** | 41.2M / 8.0B (0.51%) | **8/8** (5/5 Q&A, 3/3 tool) | **10/10 + 2/3 W2C** (only cloud-transformers variant to hit 10/10 on that single-pass project set) | 420s |
 
 **Fine-tuning is text-only on the multimodal-capable corpus** — image
 rows in the dataset are skipped at the data-prep layer. VQA at
@@ -471,10 +471,13 @@ recipe documented in the [Hugging Face blog](https://huggingface.co/blog/gemma4)
 which explicitly freezes both vision and audio towers during
 text-focused fine-tuning.
 
-*Isolated benchmarks run without tool schemas. Production benchmarks
-run in the full agentic loop with tool definitions passed via
-`apply_chat_template(tools=[...])`. The 26B A4B reliably calls tools
-when given the function signatures it was trained on.*
+*Isolated checks run without tool schemas. Production checks run in the
+full agentic loop with tool definitions passed via
+`apply_chat_template(tools=[...])`. The May 2026 parity numbers are
+project-held-out prompts, not a public benchmark, and were measured as
+single inference passes at the Kaggle-recommended sampling defaults
+(`temperature=1.0`, `top_p=0.95`, `top_k=64`). The 26B A4B reliably
+calls tools when given the function signatures it was trained on.*
 
 **Precision pipeline — BF16 is Gemma 4's native release format.** Google
 publishes the open-source [Gemma 4 base](https://huggingface.co/google/gemma-4-26b-a4b-it)
@@ -515,15 +518,15 @@ The fine-tuned E4B was quantized to two interchangeable Q4_K_M GGUF variants for
 
 | | PLE-Q4_0 (laptop quant) | Standard Q6_K-PLE (cloud quant) |
 |---|---|---|
-| GGUF size | **4.61 GB** | **5.34 GB** |
+| GGUF size | **5.34 GB** | **5.34 GB** |
 | Quantization hardware | 16 GB laptop (`--tensor-type` PLE override) | High-RAM cloud notebook (llama.cpp default Q4_K_M) |
 | Inference hardware | 16 GB Intel i5 laptop CPU (same) | 16 GB Intel i5 laptop CPU (same) |
 | Domain Q&A (5 prompts) | **5/5 ✅** | **5/5 ✅** |
 | Tool calling (5 prompts) | **5/5 ✅** | **5/5 ✅** |
-| **Total benchmark** | **10/10** | **10/10** |
+| **Total project-held-out check** | **10/10** | **10/10** |
 | HF artifact | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m.gguf` | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m-standard.gguf` |
 
-Both pair with the same 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
+Both pair with the same 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 on the project-held-out set + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
 
 ### Feature 5 — Multi-Tier Hardware Deployment *(One fine-tune, five runtime targets)*
 
@@ -533,13 +536,13 @@ The same fine-tuned SolarHive model family serves four distinct hardware classes
 |------|----------|------|-------|---------|---------------|-------|--------|
 | **Phone (browser)** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | Base E4B `.task` (upstream pre-converted) + SolarHive UX layer + on-device agentic loop | LiteRT | ✅ Browser app shipped at [`web-litert/`](web-litert/) |
 | **Phone (native)** | ARM64 Android / Apple Silicon | $0 (existing phone) | phone battery | [Cactus](https://github.com/cactus-compute/cactus) (mobile-NPU runtime) | Fine-tuned E4B → INT4 (`solarhive-e4b-cactus`) | Cactus | ✅ Convert pipeline validated on Colab; ✅ On-device inference validated end-to-end on a Snapdragon 865 Android device (Android 14, 12 GB RAM) — see Feature 7 below |
-| **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M + mmproj (5.3 GB total) | llama.cpp | ✅ GGUF directly deployable today |
-| **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 parity benchmark proven |
+| **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M (5.34 GB) + 992 MB mmproj | llama.cpp | ✅ GGUF directly deployable today |
+| **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | ✅ 10/10 project-held-out parity check |
 | **Cloud** | HF Space / Colab | — | — | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | ✅ Live demo + 8/8 agentic benchmark |
 
 One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical corpus), one chat template, five hardware classes, five Special Tech tracks (LiteRT, Cactus, llama.cpp, Ollama, Unsloth) — the deployment target is the only variable.
 
-**Why the Jetson Orin Nano Super matters:** at 7–25 W on a $249 board, a single Jetson can run 24/7 from a modest solar-plus-battery setup — the SolarHive intelligence runs on the same energy infrastructure it advises. Mobile clients on the local network hit the hub at `http://<hub-ip>:8080` for tool-calling responses with live API data. Nvidia's [official Gemma 4 Jetson recipe](https://huggingface.co/blog/nvidia/gemma4) uses our exact llama.cpp stack; our `solarhive-e4b-q4_k_m.gguf` (4.61 GB) drops in directly with only the CUDA build flag change (`-DGGML_CUDA=ON`, `-DCMAKE_CUDA_ARCHITECTURES="87"`).
+**Why the Jetson Orin Nano Super matters:** at 7–25 W on a $249 board, a single Jetson can run 24/7 from a modest solar-plus-battery setup — the SolarHive intelligence runs on the same energy infrastructure it advises. Mobile clients on the local network hit the hub at `http://<hub-ip>:8080` for tool-calling responses with live API data. Nvidia's [official Gemma 4 Jetson recipe](https://huggingface.co/blog/nvidia/gemma4) uses our exact llama.cpp stack; the standard `solarhive-e4b-q4_k_m-standard.gguf` artifact (5.34 GB) drops in directly with only the CUDA build flag change (`-DGGML_CUDA=ON`, `-DCMAKE_CUDA_ARCHITECTURES="87"`).
 
 **Local-first, privacy-first:** Running Gemma 4 via Ollama, llama.cpp, or LiteRT keeps community energy data inside the neighborhood. No cloud dependency, no latency penalty, no privacy concerns — the AI runs where the community lives.
 
@@ -567,7 +570,7 @@ See [solarhive-e2b-merged](https://huggingface.co/Truthseeker87/solarhive-e2b-me
 
 > **Hackathon track:** Cactus Special Technology Track — *"For the best local-first mobile or wearable application that intelligently routes tasks between models."*
 >
-> **SolarHive's Cactus track entry rests on the "local-first mobile application" clause** — a Flutter Android app that loads SolarHive's fine-tuned Gemma 4 E4B INT4 multimodal artifact on-device and runs end-to-end inference on real ARM hardware (Snapdragon 865, 12 GB RAM, Android 14) with a multi-turn chat UI. Cross-model routing is not part of this submission's Cactus deliverable; the broader project does match query difficulty to deployment tier (cloud 26B A4B for tool-grounded queries, on-device E4B for typical chat-length advice), but that routing is documented as a project-architecture pattern across the deployment matrix above rather than wired into the Cactus app itself.
+> **SolarHive's Cactus track entry rests on the "local-first mobile application" clause** — a Flutter Android app that loads SolarHive's fine-tuned Gemma 4 E4B INT4 multimodal artifact on-device and runs end-to-end inference on real ARM hardware (Snapdragon 865, 12 GB RAM, Android 14) with a multi-turn chat UI. The final submitted Run 13 validation intentionally measured one canonical single-prompt round-trip to show judges that the mobile path works end-to-end. Cross-model routing is not part of this submission's Cactus deliverable; the broader project does match query difficulty to deployment tier (cloud 26B A4B for tool-grounded queries, on-device E4B for typical chat-length advice), but that routing is documented as a project-architecture pattern across the deployment matrix above rather than wired into the Cactus app itself.
 
 For the **native mobile** Phone tier, SolarHive targets the Cactus Special Technology Track via [Cactus Compute](https://cactuscompute.com/) ([GitHub](https://github.com/cactus-compute/cactus)) — a mobile-first inference runtime that targets ARM SoCs across Apple Silicon Macs, iPhones / iPads, Vision Pro, and Android ARM64 devices, with hardware acceleration via integrated NPUs (Apple Neural Engine, Qualcomm Hexagon, MediaTek/Exynos APU). Cactus's [supported-models table](https://github.com/cactus-compute/cactus) lists `google/gemma-4-E4B-it`, so the SolarHive fine-tune ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) drops in via `cactus convert ... --precision INT4`.
 
@@ -604,7 +607,7 @@ The companion **Flutter Android app** ([`mobile-cactus/`](mobile-cactus/)) loads
 
 The validation cycle exercised both **USB-tethered adb** (cable-attached, stable build/install/launch loops) and **wireless adb (TLS, mDNS-paired)** (over local Wi-Fi, hands-off but susceptible to drops on screen sleep). The size-verified resumable downloader in [`mobile-cactus/lib/services/artifact_downloader.dart`](mobile-cactus/lib/services/artifact_downloader.dart) was specifically designed to survive wireless-adb drops — each file's local size is verified against HuggingFace's reported `size` from the tree API; mismatches are deleted and re-fetched on the next launch automatically. The full diagnostic instrumentation (artifact audit, `/proc/self/status` memory sampler, `CycleTimer` tap-to-render timer, and the multi-schema `GenerationStats` envelope parser) lives under [`mobile-cactus/lib/services/`](mobile-cactus/lib/services/) — `diagnostics.dart` + `cactus_engine.dart` + `llm_engine.dart` together write a structured trail to `${appDocs}/solarhive_diag.log` for every chat round-trip.
 
-The sideloaded APK opens directly to a **multi-turn chat screen** — each user message triggers the full on-device inference stack end-to-end (FFI loader → file mmap → INT4 forward pass → JSON envelope parse → Dart-side LaTeX/markdown post-processor → render). The headline empirical baseline is the tap-to-render cycle, measured on the canonical chat round-trip (prompt *"What is solar GHI?"*) at production config `contextSize=1024` + `maxNewTokens=512`:
+The sideloaded APK opens directly to a **multi-turn chat UI**. For the submitted validation, Run 13 intentionally used one canonical prompt (*"What is solar GHI?"*) so the evidence stayed focused on the full on-device inference stack end-to-end (FFI loader → file mmap → INT4 forward pass → JSON envelope parse → Dart-side LaTeX/markdown post-processor → render). The headline empirical baseline is the tap-to-render cycle at production config `contextSize=1024` + `maxNewTokens=512`:
 
 | Metric (full term spelled out alongside the short form) | Value |
 |---|---|
@@ -1346,7 +1349,7 @@ community-level optimization.
 | **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Full BF16 merged cloud model |
 | **E4B LoRA** | [solarhive-e4b-lora](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | E4B adapter weights (~200 MB) — apply over base via Unsloth |
 | **E4B safetensors** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge model — merged safetensors source for transformers / GGUF conversion via llama.cpp |
-| **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment** — Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. **10/10 benchmark**. (Ollama + llama.cpp tracks) |
+| **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment** — Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. **10/10 project-held-out check**. (Ollama + llama.cpp tracks) |
 | **Dataset** | [solarhive-community-solar-multimodal](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) | 1,727 training examples (1,713 text + 14 image-grounded) |
 
 ---
@@ -1358,7 +1361,7 @@ The Special Technology Tracks recognize outstanding technical achievement using 
 | Track | Official description | SolarHive deliverable | Status |
 |---|---|---|---|
 | **Unsloth** | *"For the best fine-tuned Gemma 4 model created using Unsloth, optimized for a specific, impactful task."* | Dual fine-tune via Unsloth `FastVisionModel` — E4B + 26B A4B LoRA adapters on the SolarHive 1,727-row community-solar corpus. See [`solarhive_finetune.py`](solarhive_finetune.py) and [`solarhive-26b-a4b-lora`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) / [`solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora). | ✅ shipped |
-| **Ollama** | *"For the best project that utilizes and showcases the capabilities of Gemma 4 running locally via Ollama."* | E4B Q4_K_M GGUF served through Ollama on a 16 GB CPU laptop with the Sol-B `/api/generate` raw-mode + manual Gemma 4 prompt builder — **10/10 parity** with the cloud 26B A4B benchmark. See [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py). | ✅ shipped |
+| **Ollama** | *"For the best project that utilizes and showcases the capabilities of Gemma 4 running locally via Ollama."* | E4B Q4_K_M GGUF served through Ollama on a 16 GB CPU laptop with the Sol-B `/api/generate` raw-mode + manual Gemma 4 prompt builder — **10/10 parity on the project-held-out check** with the cloud 26B A4B benchmark. See [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py). | ✅ shipped |
 | **llama.cpp** | *"For the best innovative implementation of Gemma 4 on resource-constrained hardware."* | E4B Q4_K_M + 992 MB mmproj (vision SigLIP + audio Conformer, 1,411 tensors) — full multimodal via `llama-server --mmproj` on resource-constrained hardware. PLE-override Q4_0 variant fits 16 GB CPU laptop; standard Q4_K_M variant fits the [Jetson Orin Nano Super (7–25 W, $249)](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/). See [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf). | ✅ shipped |
 | **LiteRT** | *"For the most compelling and effective use case built using Google AI Edge's LiteRT implementation of Gemma 4."* | Browser-tier deployment via Google AI Edge's LiteRT — E2B `.tflite` for the Phone (browser) tier with on-device deterministic-workflow + emoji-format reasoning. | 🔜 in development |
 | **Cactus** | *"For the best local-first mobile or wearable application that intelligently routes tasks between models."* | Native-mobile deployment via [Cactus](https://github.com/cactus-compute/cactus) — fine-tuned E4B → INT4 mobile artifact (6.94 GB multimodal, CosSim 0.9946 quant fidelity) loaded by a companion Flutter Android app via the [Cactus Flutter SDK](https://pub.dev/packages/cactus). Convert pipeline validated end-to-end on Colab Pro CPU + High-RAM. See [`solarhive_e4b_cactus.ipynb`](solarhive_e4b_cactus.ipynb). | ✅ convert pipeline shipped; Flutter app in development |

@@ -2,7 +2,7 @@
 //
 // Sampling parameters mirror the Kaggle-recommended Gemma 4 defaults used
 // in `solarhive_inference.py` (the cloud / Colab inference pipeline). Both
-// the cloud agentic loop and the on-device single-prompt path are driving
+// the cloud agentic loop and the on-device chat path are driving
 // the same fine-tuned model family, so the sampling regime stays aligned
 // across runtimes. Drift here would make the on-device behaviour silently
 // diverge from the cloud benchmarks the project publishes.
@@ -10,8 +10,8 @@
 // The system prompt is intentionally a NARROWER variant of the cloud
 // `SYSTEM_PROMPT` in `solarhive_inference.py` (line ~772). The cloud
 // prompt instructs the model to call tools for real-time data; the
-// on-device tier has no tools wired (by design — the routing strategy
-// escalates real-time queries to the cloud HF Space via the 🛰️ emoji).
+// on-device tier has no tools wired (by design — the model can express
+// routing intent via the 🛰️ emoji for a future cloud-handoff UI).
 // The on-device prompt therefore drops the "call available tools" sentence
 // and reframes data references from "actual data" to "reasonable
 // assumptions". Identity / community facts / response-length guidance

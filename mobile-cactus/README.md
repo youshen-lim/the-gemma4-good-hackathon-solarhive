@@ -1,6 +1,6 @@
 # SolarHive — Cactus Flutter Mobile App
 
-**On-device Gemma 4 E4B inference via the [Cactus Flutter SDK](https://pub.dev/packages/cactus) on Android (and iOS, pending empirical validation).** Loads the SolarHive fine-tuned Cactus INT4 multimodal artifact from [`Truthseeker87/solarhive-e4b-cactus`](https://huggingface.co/Truthseeker87/solarhive-e4b-cactus) on first launch (~6.94 GB, one-time, cached to app-local storage), then runs all subsequent inference fully on-device with no network round-trips except the explicit cloud (🛰️) and microgrid hub (📡) escalations the user opts into.
+**On-device Gemma 4 E4B inference via the [Cactus Flutter SDK](https://pub.dev/packages/cactus) on Android (and iOS, pending empirical validation).** Loads the SolarHive fine-tuned Cactus INT4 multimodal artifact from [`Truthseeker87/solarhive-e4b-cactus`](https://huggingface.co/Truthseeker87/solarhive-e4b-cactus) on first launch (~6.94 GB, one-time, cached to app-local storage), then runs inference fully on-device. Cloud (🛰️) and microgrid hub (📡) routing are represented as model-output intent / future UI paths, not automatic network round-trips in the current APK.
 
 Companion to:
 
@@ -18,7 +18,7 @@ Companion to:
 | `pubspec.yaml` | Flutter project metadata + dependencies (`cactus`, `dio`, `path_provider`, `shared_preferences`) |
 | `lib/main.dart` | App entry. Reads first-launch sentinel from `shared_preferences`; routes to `LoadingScreen` or `ChatScreen` |
 | `lib/screens/loading_screen.dart` | First-launch download progress UI (LinearProgressIndicator + status text) |
-| `lib/screens/chat_screen.dart` | Single-prompt smoke-test screen (future iterations replace this with the multi-turn chat UI) |
+| `lib/screens/chat_screen.dart` | Multi-turn chat UI with rolling message history; Run 13 intentionally validated one canonical prompt |
 | `lib/services/artifact_downloader.dart` | HF Hub download via `dio` — lists repo files, streams each with progress callbacks; resumable across launches |
 | `lib/services/cactus_engine.dart` | Cactus Flutter SDK wrapper + cloud-routing probe |
 | `lib/services/storage.dart` | App-local artifact path resolver |
@@ -65,8 +65,8 @@ On first launch:
 
 1. App boots into `LoadingScreen` and starts the ~6.94 GB download from `Truthseeker87/solarhive-e4b-cactus` (~5–15 min on Wi-Fi)
 2. Once download completes, app routes to `ChatScreen`
-3. Tap **Generate** to run the smoke-test prompt
-4. The routing-strategy probe runs on the first generation call; the result is shown in the small status text below the response area
+3. Type a prompt, for example `What is solar GHI?`, and tap **Send**
+4. Each send triggers one on-device Cactus completion; the chat history remains visible for follow-up turns
 
 On subsequent launches, the artifact is already cached, so the app boots straight to `ChatScreen`.
 
@@ -102,13 +102,13 @@ final resultJson = cactusComplete(model, messages, null, null, null);
 
 ### Cloud-routing strategy
 
-The on-device tier escalates real-time-data queries to the SolarHive cloud tier via a 🛰️ emoji embedded in the model's output. The chat UI surfaces a routing-status line under the response area documenting the cloud handoff path; later iterations render an "Ask cloud for deeper analysis" button that POSTs the query + on-device response context to [`huggingface.co/spaces/Truthseeker87/solarhive`](https://huggingface.co/spaces/Truthseeker87/solarhive) (Gemma 4 26B A4B fine-tune) and renders the cloud response as a follow-up bubble. Microgrid hub routing (📡) follows the same pattern against a configured Ollama endpoint that serves the E4B fine-tune from the community microgrid hub.
+The on-device tier can express real-time-data escalation via a 🛰️ emoji embedded in the model's output. Later iterations can render an "Ask cloud for deeper analysis" button that POSTs the query + on-device response context to [`huggingface.co/spaces/Truthseeker87/solarhive`](https://huggingface.co/spaces/Truthseeker87/solarhive) (Gemma 4 26B A4B fine-tune) and renders the cloud response as a follow-up bubble. Microgrid hub routing (📡) follows the same pattern against a configured Ollama endpoint that serves the E4B fine-tune from the community microgrid hub.
 
 We do not use the pub.dev `cactus` package's `CompletionMode.hybrid` — that mode falls back to OpenRouter, which does not host the SolarHive 26B A4B fine-tune. A roll-own POST against our HF Space is the only way to route to the actual SolarHive cloud target.
 
 ### Inference approach: on-device narrow tier vs. cloud agentic loop
 
-The SolarHive cloud inference pipeline (`solarhive_inference.py`) runs a full agentic loop with five tools (OpenWeatherMap, EIA grid status, NREL PVWatts baseline, Open-Meteo solar production, battery state simulator), up to three loop rounds, and a two-message tool-result format matching the model's training distribution. The on-device tier in this app is intentionally narrower: a single-prompt → single-response call, no tools, no agentic loop. Real-time queries that need tool data emit 🛰️ on-device and the chat UI offers a cloud-handoff button that POSTs to the SolarHive HF Space — that's the entire point of the routing UX, and it's what keeps the on-device tier fast on phone hardware.
+The SolarHive cloud inference pipeline (`solarhive_inference.py`) runs a full agentic loop with five tools (OpenWeatherMap, EIA grid status, NREL PVWatts baseline, Open-Meteo solar production, battery state simulator), up to three loop rounds, and a two-message tool-result format matching the model's training distribution. The on-device tier in this app is intentionally narrower: each **Send** performs one Cactus completion over the current rolling chat history, with no tools and no agentic loop. Real-time queries that need tool data can be marked with 🛰️ routing intent on-device; the actual POST-to-HF-Space handoff UI is future work.
 
 What stays consistent across the two tiers:
 
@@ -117,8 +117,8 @@ What stays consistent across the two tiers:
 
 What is intentionally divergent:
 
-- No tool-calling on-device. Routing escalation handles tool-needing queries via the 🛰️ emoji + cloud handoff path.
-- No agentic multi-round loop on-device. Single prompt → single response keeps phone-side latency bounded.
+- No tool-calling on-device. Tool-needing queries can be marked via the 🛰️ emoji; the cloud handoff action is future UI work.
+- No agentic multi-round loop on-device. The UI supports multi-turn chat, but each send produces exactly one assistant response; longer-context or tool-grounded queries are routed upward.
 
 Drift detectors in [`test/services/inference_constants_test.dart`](test/services/inference_constants_test.dart) pin the sampling values, the system prompt identity + community facts + length guidance, the absence of the "call tools" instruction, and the single-body shape. A change that silently moves on-device away from these alignment points fails those tests rather than drifting quietly.
 
@@ -126,19 +126,11 @@ Drift detectors in [`test/services/inference_constants_test.dart`](test/services
 
 ## Known limitations
 
-1. **HF token while the repo is private.** While `Truthseeker87/solarhive-e4b-cactus` access is restricted, `artifact_downloader.dart`'s `kHfToken` reads `String.fromEnvironment('HF_TOKEN', defaultValue: '')` at compile time. Pass a read-scope token at run/build time:
+1. **iOS path unverified.** The current scaffold targets Android. The `--platforms android,ios` flag in `flutter create` is forward-looking — iOS validation is pending empirical testing on a physical device.
 
-   ```bash
-   flutter run --dart-define=HF_TOKEN=hf_xxxxxxxxxxxx
-   ```
+2. **Resumable download is heuristic.** Existing non-empty files in the artifact dir are skipped on subsequent launches. This works for partial-download recovery but does not validate file integrity (no SHA check). A future enhancement could call `HfApi.list_repo_files` for SHA-based validation.
 
-   The dio `Authorization` header is wired conditionally — empty string (default) sends no header for anonymous access; non-empty value sends `Bearer <token>`.
-
-2. **iOS path unverified.** The current scaffold targets Android. The `--platforms android,ios` flag in `flutter create` is forward-looking — iOS validation is pending empirical testing on a physical device.
-
-3. **Resumable download is heuristic.** Existing non-empty files in the artifact dir are skipped on subsequent launches. This works for partial-download recovery but does not validate file integrity (no SHA check). A future enhancement could call `HfApi.list_repo_files` for SHA-based validation.
-
-4. **Platform minimum versions.** Per the Cactus pub.dev page: **iOS 12.0+** and **Android API 24+**. After running `flutter create .`, verify `android/app/build.gradle` has `minSdkVersion >= 24` and `ios/Podfile` has `platform :ios, '12.0'` (or higher).
+3. **Platform minimum versions.** Per the Cactus pub.dev page: **iOS 12.0+** and **Android API 24+**. After running `flutter create .`, verify `android/app/build.gradle` has `minSdkVersion >= 24` and `ios/Podfile` has `platform :ios, '12.0'` (or higher).
 
 ---
 
@@ -171,20 +163,19 @@ flutter test test/widgets/
 | File | What it covers |
 |---|---|
 | `test/widgets/loading_screen_test.dart` | LoadingScreen renders the SolarHive heading, the one-time-download disclosure, and a LinearProgressIndicator on first build |
-| `test/widgets/chat_screen_test.dart` | ChatScreen renders the SolarHive AppBar (drift detector — catches dev-phase labels leaking into user-facing titles), the on-device model header, the Generate button, the smoke-test placeholder, and asserts the routing-probe line is absent before a probe runs |
+| `test/widgets/chat_screen_test.dart` | ChatScreen renders the SolarHive AppBar (drift detector — catches dev-phase labels leaking into user-facing titles), the on-device model header, the empty-state hint, the text input, the send button, multi-turn history, soft-cap warning, and failure diagnostics |
 
 ### Tier 3 — integration tests (device required)
 
 Full end-to-end smoke test on a connected Android device or ARM64 AVD. The artifact must already be downloaded into app-local storage (or the test will block for up to 30 minutes waiting for the first-launch download to complete):
 
 ```bash
-flutter test integration_test/app_smoke_test.dart \
-  --dart-define=HF_TOKEN=hf_xxxxxxxxxxxx
+flutter test integration_test/app_smoke_test.dart
 ```
 
 | File | What it covers |
 |---|---|
-| `integration_test/app_smoke_test.dart` | App boot reaches a launchable state; tapping Generate drives a full inference and surfaces the routing-probe line |
+| `integration_test/app_smoke_test.dart` | App boot reaches a launchable state; typing `What is solar GHI?` and tapping Send drives the on-device inference path and records the prompt in chat history |
 
 ### Run all non-device tests
 

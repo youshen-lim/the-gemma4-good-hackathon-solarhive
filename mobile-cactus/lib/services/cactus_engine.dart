@@ -20,9 +20,9 @@
 //     are written to the same diagnostic log so post-mortem analysis can
 //     correlate the audit with the engine's own log output.
 //
-// Cloud handoff is implemented independently via direct POST to the
-// SolarHive HF Space (see `chat_screen.dart`'s 🛰️ button wiring). The
-// roll-own POST is the only cloud routing path; hybrid completion in the
+// Cloud handoff is intentionally outside this engine. The on-device model
+// can emit routing intent (for example 🛰️), and a future UI can turn that
+// into a direct POST to the SolarHive HF Space. Hybrid completion in the
 // pub.dev OO API falls back to OpenRouter, which does not host the
 // SolarHive 26B A4B fine-tune.
 
@@ -47,8 +47,8 @@ import 'llm_engine.dart';
 /// chat-length prompts while halving per-step attention work vs 2048.
 /// Trade-off: long multi-turn conversations exceeding 1024 tokens of
 /// rolling history would truncate; mitigated by the on-device tier
-/// being narrow (single-prompt UX), with longer-context queries
-/// escalated via the 🛰️ cloud handoff.
+/// being narrow (one response per send), with longer-context queries
+/// routed upward when needed.
 const int kDefaultContextSize = 1024;
 
 /// Parsed token-count + extracted response text from a single
