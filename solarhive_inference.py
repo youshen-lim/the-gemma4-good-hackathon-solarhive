@@ -2112,8 +2112,15 @@ paper's Section 3.5 suggestion of varying γ during inference: increase
 rejection.
 
 **This cell, when enabled (`_RUN_MTP_DEMO = True`), will:**
-1. Load the SolarHive cloud target (`google/gemma-4-26B-A4B-it`) in BF16.
-2. Load the paired drafter `google/gemma-4-26B-A4B-it-assistant` in BF16.
+1. Load the SolarHive deployed BF16 cloud target
+   (`Truthseeker87/solarhive-26b-a4b-merged` — the LoRA-merged Gemma 4
+   26B-A4B-it). This is the same artifact §13 Variant 4 measures.
+2. Load the base-paired drafter `google/gemma-4-26B-A4B-it-assistant` in BF16.
+   Note: Google ships drafters for the BASE Gemma 4 26B-A4B-it; no
+   SolarHive-specific drafter exists. Per Leviathan/Kalman/Matias 2023,
+   correctness is invariant to drafter quality — only acceptance rate α
+   varies when target distribution diverges from what the drafter
+   approximates. The measured α here is the SolarHive contribution.
 3. Run the same prompt through both paths — baseline (no drafter) vs.
    MTP (drafter paired) — with deterministic argmax sampling so the
    speculative-sampling guarantee is byte-verifiable.
@@ -2153,8 +2160,12 @@ else:
         AutoProcessor as _AutoProc14,
     )
 
-    _MTP_TARGET_ID    = "google/gemma-4-26B-A4B-it"
-    _MTP_ASSISTANT_ID = _MTP_TARGET_ID + "-assistant"  # canonical drafter naming
+    # Target: SolarHive's deployed BF16 cloud model (LoRA-merged 26B-A4B-it).
+    # Same artifact as §13 Variant 4. Swap to a base or quantized variant by
+    # changing _MTP_TARGET_ID; the drafter ID stays pinned to the base-paired
+    # checkpoint Google released, since no SolarHive-specific drafter exists.
+    _MTP_TARGET_ID    = "Truthseeker87/solarhive-26b-a4b-merged"
+    _MTP_ASSISTANT_ID = "google/gemma-4-26B-A4B-it-assistant"  # base-paired drafter (Google, May 5, 2026)
 
     print("=" * 60)
     print("§14: MTP Drafter Demo — target + paired drafter")
@@ -2162,7 +2173,11 @@ else:
     print(f"  Target:    {_MTP_TARGET_ID}")
     print(f"  Drafter:   {_MTP_ASSISTANT_ID}")
 
-    _proc14 = _AutoProc14.from_pretrained(_MTP_TARGET_ID, trust_remote_code=True)
+    # Processor pinned to the base repo: per the SolarHive A4B Merged HF card,
+    # the base processor carries the correct chat template + native tool-call
+    # support; the LoRA-merged repo's saved processor is functionally equivalent
+    # but the base is the documented load path across all 5 cloud variants.
+    _proc14 = _AutoProc14.from_pretrained("google/gemma-4-26B-A4B-it", trust_remote_code=True)
 
     # Load target + drafter both in BF16 on the available GPU.
     # Note: the drafter is small enough (~few hundred MB) that it adds negligible
