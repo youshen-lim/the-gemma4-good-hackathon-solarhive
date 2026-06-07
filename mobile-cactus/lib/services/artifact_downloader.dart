@@ -30,13 +30,10 @@ const String kHfRepoId = 'Truthseeker87/solarhive-e4b-cactus';
 const String kHfApiBase = 'https://huggingface.co/api/models';
 const String kHfResolveBase = 'https://huggingface.co';
 
-/// HF read token for accessing the SolarHive Cactus model repository.
-/// Compile-time constant read from `--dart-define=HF_TOKEN=hf_xxx` at
-/// `flutter run` / `flutter build` time. Empty string (default) means
-/// anonymous access; pass a read-scope token only while the repository
-/// is private. Once the repository is publicly accessible, no token
-/// is required:
-///   flutter run --dart-define=HF_TOKEN=hf_xxxxxxxxxxxx
+/// Optional HF read token. Empty string (default) means anonymous
+/// access, which is the expected runtime mode once the model repository
+/// is publicly accessible. The dio Authorization header below is wired
+/// conditionally — empty means no header is sent.
 const String kHfToken = String.fromEnvironment('HF_TOKEN', defaultValue: '');
 
 /// Lower-bound sanity threshold for the listed file count. The Cactus

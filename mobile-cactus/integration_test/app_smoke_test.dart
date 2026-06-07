@@ -4,11 +4,10 @@
 // Cactus artifact already downloaded into app-local storage. On a fresh
 // install the LoadingScreen will run for ~5-15 minutes downloading the
 // ~6.94 GB artifact; this test waits up to 30 minutes for that path before
-// asserting the Generate flow.
+// asserting the Send flow.
 //
 // Run with:
-//   flutter test integration_test/app_smoke_test.dart \
-//     --dart-define=HF_TOKEN=hf_xxxxxxxxxxxx
+//   flutter test integration_test/app_smoke_test.dart
 //
 // On CI without a device, this file is excluded by default; only
 // `flutter test` (no integration_test/ path) runs the unit + widget tests.
