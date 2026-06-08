@@ -526,7 +526,7 @@ The fine-tuned E4B was quantized to a standard Q4_K_M GGUF (Q6_K on the PLE tens
 | **Total project-held-out check** | **10/10** + 2/3 W2C |
 | HF artifact | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) → `solarhive-e4b-q4_k_m.gguf` (and `…-standard.gguf`, same quant) |
 
-**Quantizing on a 16 GB laptop:** the standard Q4_K_M conversion needs a ~10.7 GB float32 buffer for the Q6_K PLE tensor and OOMs on 16 GB hardware. Adding `--tensor-type per_layer_token_embd.weight=q4_0` bypasses the buffer and yields a smaller (~4.3 GB) GGUF — validated quality-safe in development, provided as a reproducibility recipe rather than a separately-shipped artifact.
+**Quantizing on a 16 GB laptop:** the standard Q4_K_M conversion needs a ~10.7 GB float32 buffer for the Q6_K PLE tensor and OOMs on 16 GB hardware. Adding `--tensor-type per_layer_token_embd.weight=q4_0` bypasses the buffer and yields a smaller (~4.6 GB) GGUF — validated quality-safe in development, provided as a reproducibility recipe rather than a separately-shipped artifact.
 
 It pairs with the 992 MB [`mmproj-solarhive-e4b-BF16.gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) (vision SigLIP + audio Conformer, 1411 tensors) for full multimodal via `llama-server --mmproj`. The demo path uses Ollama's **`/api/generate` raw mode + a manual Gemma 4 prompt builder** — it bypasses Ollama 0.21.0's `gemma4.go` content-drop issue (which silently rejects fine-tuned Gemma 4's native tool-call format) to score 10/10 on the project-held-out set + 2/3 W2C. See `solarhive_inference_e4b_gguf_ollama.py` for the implementation.
 
