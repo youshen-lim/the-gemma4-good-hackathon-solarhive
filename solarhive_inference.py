@@ -757,8 +757,8 @@ for fn in TOOLS:
 # System prompt is repeated twice — prompt repetition improves instruction
 # following in causal LLMs by allowing each token to attend to every other
 # prompt token, winning 47/70 benchmark-model tests with zero losses and no
-# latency increase. See: Leviathan, Kalman & Matias (2024), "Repeat to
-# Improve Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
+# latency increase. See: Leviathan, Kalman & Matias (2025), "Prompt
+# Repetition Improves Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
 _UNIFIED_SYSTEM_BODY = (
     "You are SolarHive, an AI energy advisor for a community of 12 homes "
     "with rooftop solar and shared battery storage in Ann Arbor, Michigan. "

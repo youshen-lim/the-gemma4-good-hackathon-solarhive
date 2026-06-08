@@ -750,7 +750,7 @@ The loop:
 """
 
 # System prompt mirroring `solarhive_inference.py` SYSTEM_PROMPT (doubled per
-# Leviathan/Kalman/Matias 2024 — repeat to improve causal-LM instruction
+# Leviathan/Kalman/Matias 2025 — prompt repetition improves causal-LM instruction
 # following, +47/70 on Google's internal benchmark with no latency cost).
 _UNIFIED_SYSTEM_BODY = (
     "You are SolarHive, an AI energy advisor for a community of 12 homes "

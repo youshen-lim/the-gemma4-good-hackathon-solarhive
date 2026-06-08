@@ -1140,8 +1140,8 @@ np.random.seed(42)
 # in solarhive_finetune.py and solarhive_inference.py. Verified by
 # tests/test_finetune_option_c_smoke.py::TestPromptParity.
 #
-# Body repeated twice per Leviathan et al. (2024), "Repeat to Improve
-# Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
+# Body repeated twice per Leviathan et al. (2025), "Prompt Repetition
+# Improves Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
 _UNIFIED_SYSTEM_BODY = (
     "You are SolarHive, an AI energy advisor for a community of 12 homes "
     "with rooftop solar and shared battery storage in Ann Arbor, Michigan. "

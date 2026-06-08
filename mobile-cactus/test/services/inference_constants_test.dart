@@ -75,9 +75,9 @@ void main() {
       expect(kSolarHiveSystemPrompt, contains('reasonable assumptions'));
     });
 
-    test('is doubled (mirrors cloud SYSTEM_PROMPT "Repeat to Improve" pattern)', () {
+    test('is doubled (mirrors cloud SYSTEM_PROMPT "Prompt Repetition" pattern)', () {
       // The cloud `SYSTEM_PROMPT = _UNIFIED_SYSTEM_BODY + "\n\n" + _UNIFIED_SYSTEM_BODY`
-      // applies "Repeat to Improve" (Leviathan, Kalman & Matias 2024,
+      // applies "Prompt Repetition" (Leviathan, Kalman & Matias 2025,
       // arXiv:2512.14982). On-device mirrors this verbatim per the
       // post-success polish: doubling the system prompt is ~+77 MB of
       // KV cache (negligible on the validation device's 12 GB RAM, with

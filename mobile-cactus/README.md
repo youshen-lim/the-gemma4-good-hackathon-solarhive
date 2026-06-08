@@ -113,7 +113,7 @@ The SolarHive cloud inference pipeline (`solarhive_inference.py`) runs a full ag
 What stays consistent across the two tiers:
 
 - **Sampling parameters** are pinned to the Kaggle-recommended Gemma 4 defaults (`temperature=1.0`, `top_p=0.95`, `top_k=64`) in [`lib/services/inference_constants.dart`](lib/services/inference_constants.dart). The same fine-tune family driving the same sampling regime keeps on-device behaviour comparable to the cloud benchmarks the project publishes.
-- **System prompt identity** matches the cloud prompt verbatim (SolarHive identity, 12-home Ann Arbor community, rooftop solar + shared battery, 3-5 sentence response-length guidance). The on-device variant in `inference_constants.dart` drops the cloud-only "call the available tools" sentence (no tools wired on-device) and reframes "actual data" → "reasonable assumptions" (no live API access on-device). It is a single body rather than the doubled cloud prompt; the "Repeat to Improve" technique is a cloud-side latency trade we do not pay on phone hardware.
+- **System prompt identity** matches the cloud prompt verbatim (SolarHive identity, 12-home Ann Arbor community, rooftop solar + shared battery, 3-5 sentence response-length guidance). The on-device variant in `inference_constants.dart` drops the cloud-only "call the available tools" sentence (no tools wired on-device) and reframes "actual data" → "reasonable assumptions" (no live API access on-device). It is a single body rather than the doubled cloud prompt; the "Prompt Repetition" technique is a cloud-side latency trade we do not pay on phone hardware.
 
 What is intentionally divergent:
 

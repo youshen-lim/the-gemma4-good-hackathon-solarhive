@@ -22,7 +22,7 @@
 // itself with a blank-line separator and sent as a SINGLE system message.
 // Doubling lets every token in the prompt attend to every other prompt
 // token, improving instruction-following without a latency hit. Reference:
-// Leviathan, Kalman & Matias (2024), "Repeat to Improve Non-Reasoning
+// Leviathan, Kalman & Matias (2025), "Prompt Repetition Improves Non-Reasoning
 // LLMs", Google Research. https://arxiv.org/abs/2512.14982
 //
 // LATEX HANDLING:
@@ -57,7 +57,7 @@ const int kKaggleTopK = 64;
 const int kDefaultMaxNewTokens = 512;
 
 // =======================================================================
-// System prompt body -- doubled at the bottom per "Repeat to Improve"
+// System prompt body -- doubled at the bottom per "Prompt Repetition"
 // =======================================================================
 
 /// Single-occurrence body. Kept terse — the verbose unit-formatting

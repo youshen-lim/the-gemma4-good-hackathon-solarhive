@@ -307,8 +307,8 @@ print(f"Trainable: {trainable:,} / {total:,} ({100*trainable/total:.2f}%)")
 # the SYSTEM_PROMPT body in solarhive_inference.py byte-for-byte (verified
 # by the project test suite).
 #
-# Body repeated twice per Leviathan et al. (2024), "Repeat to Improve
-# Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
+# Body repeated twice per Leviathan et al. (2025), "Prompt Repetition
+# Improves Non-Reasoning LLMs", Google Research. https://arxiv.org/abs/2512.14982
 _UNIFIED_SYSTEM_BODY = (
     "You are SolarHive, an AI energy advisor for a community of 12 homes "
     "with rooftop solar and shared battery storage in Ann Arbor, Michigan. "
