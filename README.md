@@ -1061,7 +1061,7 @@ The TQ5 multi-call probe (*"Compare today's irradiance forecast across Ann Arbor
 
 The probe categories come from [Ross et al. 2025, *When2Call*, arXiv:2504.18851](https://arxiv.org/abs/2504.18851). The probes are not held out. Close paraphrases of all three appear in the training data. The matcher is a lenient keyword check (`solarhive_inference.py` lines 1232 to 1252). In the May 2026 final inference run (notebook 3), all five cloud variants were measured directly on the three probes in a single run. The GGUF variant was measured separately with the local Ollama harness. Its results file is not committed.
 
-The Hugging Face model cards currently label some of these cloud results "inferred". Notebook 3 shows them as measured. This conflict is not yet resolved.
+The Hugging Face model cards were corrected on November 21, 2026. They now label these cloud results "measured in a single run", matching notebook 3.
 
 | Variant | Backend | (b) tool routing | (c) follow-up question | (d) refuse + redirect | Nominal | Source |
 |---|---|:-:|:-:|:-:|:-:|---|
@@ -1341,10 +1341,6 @@ that effect.
   used synthetic placeholder images.
 - The GGUF results file and the on device log are not committed. The
   earlier NF4 8 question check has no notebook in this repository.
-- The Hugging Face model cards label some When2Call results "inferred".
-  Notebook 3 shows them as measured in a single run. Several card
-  sizes, scores and probe descriptions also conflict with the archived
-  runs.
 
 **Deployment**
 
@@ -1507,7 +1503,8 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Q&A scoring | 5/5 Q&A presented as a graded result inside 8/8, 9/10 and 10/10 | Q&A is recorded as 5/5 by the script, not graded. Only tool routing and When2Call are scored by code. | The script sets Q&A to the number of questions (`solarhive_inference.py` lines 1436 to 1897) |
 | Score sources | 8/8 and 9/10 shown without a clear test set | 8/8 is the earlier April 2026 fine tune check. 9/10 and 10/10 are the final May 2026 inference run. | The two checks use different tool prompts |
 | When2Call probes | "Held-out" probes | Not held out. Close paraphrases appear in the training data. Lenient keyword matcher. | `solarhive_datagen.py` lines 2717, 5079, 5107 |
-| When2Call source labels | Three cloud variants "inferred" by lossless equivalence | Measured in a single run (notebook 3). Hugging Face cards still say "inferred" for some. | Notebook 3, cells 39, 45 and 47 print direct results |
+| When2Call source labels | Three cloud variants "inferred" by lossless equivalence | Measured in a single run (notebook 3). The Hugging Face cards were corrected to match on November 21, 2026. | Notebook 3, cells 39, 45 and 47 print direct results |
+| Hugging Face card conflicts (November 21, 2026) | The cards label some When2Call results "inferred", and several card sizes, scores and probe descriptions conflict with the archived runs | Resolved. The cards were corrected on November 21, 2026 to match notebook 3 and this README | Card updates reviewed by Claude and Codex |
 | When2Call paper | 9 to 67% tool hallucination rates on (c) and (d) | Removed. The paper links missing follow up and unable to answer data to higher hallucination. | The range is not stated in the paper and is not per category |
 | NF4 memory | About 16 GB; fits A100 40 GB | 49.2 GB GPU memory in the May 2026 run. 48.34 GB on disk. | Notebook 3, cell 47; Hugging Face file listing |
 | Merged A4B size | About 48 GB | 51.61 GB on disk | Hugging Face file listing (49.91 GB and 1.70 GB shards) |
