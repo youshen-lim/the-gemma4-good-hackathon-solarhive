@@ -1,8 +1,9 @@
 # SolarHive — Data Principles
 
-Methodology for building the fine-tuning dataset. Numbers in the algorithmically
-generated rows come from API responses. The 413 hand written rows contain author
-written figures.
+Methodology for building the fine-tuning dataset. Temperatures and irradiance in
+generated rows come from API responses. Grid percentages and CO₂ numbers come from
+EIA responses when available and hardcoded regional fallback values otherwise. The
+413 hand written rows contain author written figures.
 
 ## 1. Data Gathering
 
@@ -15,8 +16,10 @@ written figures.
 - **Geographic diversity.** Two distinct climate zones — MISO/Midwest
   (Ann Arbor MI, Detroit MI) and CAISO/Pacific (San Mateo CA, Fresno CA) —
   with per-location metadata: timezone, panel capacity, tilt angle, grid region.
-- **No synthetic values.** All temperatures, irradiance, grid percentages, and
-  CO₂ numbers are derived directly from API responses, not invented.
+- **Generated row provenance.** Temperatures and irradiance in generated rows come
+  from API responses. Grid percentages and CO₂ numbers come from EIA responses when
+  available and hardcoded regional fallback values otherwise (`_FALLBACK_GRID` in
+  `solarhive_datagen.py`). The 413 hand written rows contain author written figures.
 
 ## 2. Inspection
 
