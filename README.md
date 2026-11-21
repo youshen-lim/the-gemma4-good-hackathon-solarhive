@@ -46,7 +46,7 @@ equipment.
 
 ## Why This Matters to Me
 
-I chose Ann Arbor, Michigan as SolarHive's prototype location because I live here — after years in New York and Boston. Ann Arbor's low-lying suburban landscape eliminates the shading complications of high-rise cities, making it an ideal testbed for community solar.
+I chose Ann Arbor, Michigan as SolarHive's prototype location because I live here — after years in New York and Boston. The project models suburban rooftop solar conditions and does not survey actual shading at local sites.
 
 My motivation runs deeper than a hackathon:
 
@@ -166,11 +166,7 @@ energy state and plans for the group rather than for each home alone.
 The current prototype answers questions about one modeled community. It
 does not read real household meters.
 
-**Community-based storage:** Shared battery storage (and eventually
-fuel cell technologies like solid oxide or salt-based fuel cells)
-captures surplus energy that would otherwise be exported at low grid
-rates. This compensates for low production efficiency by ensuring no
-generated watt is wasted.
+**Community storage:** The prototype simulates a shared battery. It does not measure export reduction, energy savings or storage efficiency.
 
 **Decentralized live grid:** Energy flows within the community based on
 real-time need — a live, breathing grid rather than the dead,
@@ -370,19 +366,15 @@ edge deployment:
 | Model | Params (Total / Active) | Architecture | Vision Encoder | Context | Modalities | Selection |
 |-------|------------------------|--------------|---------------|---------|------------|-----------|
 | E2B | 5.1B / 2.3B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio | **Considered for Ollama serving. Not fine tuned or shipped.** |
-| E4B | 8B / 4.5B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio | **Fine-tuned for edge.** Any-to-Any multimodal, fits T4 in 4-bit (~12 GB) |
+| E4B | 8B / 4.5B effective | Dense + PLE | ~150M | 128K | Text, Image, Audio | **Fine tuned for edge.** This project did not measure T4 memory use. |
 | 26B A4B | 25.2B / 3.8B active | MoE (8/128) | ~550M | 256K | Text, Image | **Fine-tuned for cloud.** Lowest training loss of the two fine tunes (0.6956). 256K context. |
 | 31B | 30.7B / 30.7B | Dense | ~550M | 256K | Text, Image | **Not selected.** About 3 points higher than 26B A4B on MMMU Pro and MMLU Pro. This project did not measure its speed. |
 
 *Source: [Gemma 4 Model Card](https://gemma.ai/models/gemma-4/model-card/) (the older ai.google.dev link now redirects there). All four models support native function calling and agentic workflows.*
 
-**Benchmark backing — why 26B A4B is the sweet spot:**
+**Benchmark context:**
 
-SolarHive requires two core capabilities: **multimodal VQA** (analyzing
-sky photos and panel images to assess solar conditions) and **native
-function calling** (autonomously invoking weather, solar, battery, and
-grid APIs in agentic loops). The official benchmarks show why 26B A4B
-delivers the best capability-to-cost ratio for these use cases:
+The table below contains Google's published base model benchmarks. These results provide model selection context. They do not measure SolarHive quality, speed or cost.
 
 | Benchmark | SolarHive Use Case | E2B | E4B | **26B A4B** | 31B |
 |-----------|-------------------|-----|-----|-------------|-----|
@@ -403,13 +395,8 @@ candidates for future voice interaction at the edge.
 
 **Key architectural decisions:**
 
-- **26B A4B for cloud inference (VQA + function calling):** The larger
-  ~550M vision encoder delivers superior sky condition analysis and
-  panel health inspection — critical for SolarHive's three VQA modes
-  (MMMU Pro 73.8% vs E4B's 52.6%). MoE sparse activation activates
-  only 3.8B of 25.2B parameters per forward pass. 256K context window accommodates
-  multi-round agentic tool-calling loops where the model chains 4 API
-  calls per turn. Training loss (average of the last 20 steps) was
+- **26B A4B for cloud inference:** Google reports higher base model vision benchmark scores for 26B A4B than for E4B. SolarHive did not score VQA, so this project does not establish superior sky or panel analysis. The model activates 3.8B of 25.2B parameters per token and supports a 256K context window. The parameter and benchmark values appear in the [official Gemma 4 model card](https://gemma.ai/models/gemma-4/model-card/).
+  Training loss (average of the last 20 steps) was
   0.6956 for 26B A4B and 0.9218 for E4B. No validation loss was
   measured, so these values do not compare model quality. In the May
   2026 run, the NF4 variant used 49.2 GB of GPU memory on one GPU
@@ -572,13 +559,13 @@ The table lists five deployment targets. Four use the SolarHive fine tune. The b
 |------|----------|------|-------|---------|---------------|-------|--------|
 | **Phone (browser)** | Any Android / iOS / browser | $0 (existing phone) | phone battery | LiteRT / MediaPipe Tasks Web | Base E4B `.task` (upstream pre-converted) + SolarHive UX layer + on-device agentic loop | LiteRT | Browser app code in [`web-litert/`](web-litert/) loads the base E4B bundle. No browser test results are published. |
 | **Phone (native)** | ARM64 Android / Apple Silicon | $0 (existing phone) | phone battery | [Cactus](https://github.com/cactus-compute/cactus) (mobile-NPU runtime) | Fine-tuned E4B → INT4 (`solarhive-e4b-cactus`) | Cactus | Convert pipeline run on Colab. Android APK released (v1.0). Tested with one prompt on one Snapdragon 865 Android device (Android 14, 12 GB RAM). See Feature 7 below. |
-| **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | **$249** | **7–25 W** (solar-powerable) | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | E4B Q4_K_M (5.34 GB) + 992 MB mmproj | llama.cpp | Not tested. llama.cpp supports the GGUF format on Jetson. |
+| **Community microgrid hub** | [Jetson Orin Nano Super Developer Kit](https://www.nvidia.com/en-us/autonomous-machines/embedded-systems/jetson-orin/nano-super-developer-kit/) | See current vendor pricing | **7 to 25 W** | [llama.cpp + CUDA](https://huggingface.co/blog/nvidia/gemma4) | Planned E4B Q4_K_M target | llama.cpp | Not tested. |
 | **Admin / operator laptop** | Intel i5-1135G7 (any 16 GB CPU laptop) | existing hardware | CPU-only | Ollama (llama.cpp backend) | E4B Q4_K_M | Ollama + llama.cpp | 5 of 5 tool routing and 2 of 3 When2Call in one local run. Results file not committed. |
-| **Cloud** | HF Space / Colab | — | — | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | HF Space is paused. Colab run (May 2026): 4 of 5 tool routing, 3 of 3 When2Call. |
+| **Cloud** | HF Space / Colab | Not applicable | Not applicable | transformers + Unsloth `FastVisionModel` | 26B A4B LoRA (BF16 or NF4) | Unsloth | HF Space is paused. Colab run in May 2026: 4 of 5 tool routing and 3 of 3 When2Call. |
 
 One fine-tuning pipeline (Unsloth), one training dataset (1,727-row canonical corpus), one chat template and five Special Tech tracks (LiteRT, Cactus, llama.cpp, Ollama, Unsloth). The LiteRT tier uses the upstream base model, not the fine tune.
 
-**Why the Jetson Orin Nano Super matters:** The README lists the board at $249 and 7 to 25 W. These figures were not rechecked in November 2026. A board in that power range could run from a modest solar and battery setup. SolarHive has not been tested on a Jetson. The planned design has mobile clients on the local network call the hub at `http://<hub-ip>:8080`. Nvidia's [official Gemma 4 Jetson recipe](https://huggingface.co/blog/nvidia/gemma4) uses the same llama.cpp stack. The standard `solarhive-e4b-q4_k_m-standard.gguf` artifact (5.34 GB) should work with the CUDA build flags (`-DGGML_CUDA=ON`, `-DCMAKE_CUDA_ARCHITECTURES="87"`). This is untested.
+**Planned Jetson target:** SolarHive has not been tested on a Jetson. A future test must verify model loading, memory use, tool routing and response latency before this README can claim compatibility.
 
 **Local inference:** Running Gemma 4 via Ollama, llama.cpp, or LiteRT keeps prompts on the device. Live data still comes from cloud APIs (OpenWeatherMap, Open-Meteo, EIA, NREL). Local inference is slower than the cloud GPU path.
 
@@ -598,7 +585,7 @@ For the Phone / browser tier specifically, the recommended pattern is to couple 
 5. UI renders leading emojis large + text underneath.
 ```
 
-**Why this beats on-device tool calling at the ultra-edge tier:** smaller models degrade on structured tool-call output; client-side tool calling exposes API keys in page source; the emoji system prompt conflicts with a tool-calling system prompt. The deterministic workflow handles orchestration as plain code and hands E2B a single well-scoped reasoning task. The pattern is designed for native mobile (Swift / Kotlin / Flutter), browser (MediaPipe LLM Inference Web + WebGPU), and Raspberry Pi 5 (`litert-lm` Python). It has not been tested on those platforms.
+**Planned deterministic workflow:** This design would fetch data in application code and place the values in the model prompt. The project has not tested this E2B design on mobile, browser or Raspberry Pi hardware.
 
 This E2B pattern is planned. No E2B fine tune, E2B LiteRT bundle or E2B notebook is published.
 
@@ -608,7 +595,7 @@ This E2B pattern is planned. No E2B fine tune, E2B LiteRT bundle or E2B notebook
 >
 > **SolarHive's Cactus track entry rests on the "local-first mobile application" clause** — a Flutter Android app that loads SolarHive's fine-tuned Gemma 4 E4B INT4 multimodal artifact on-device and runs end-to-end inference on real ARM hardware (Snapdragon 865, 12 GB RAM, Android 14) with a multi-turn chat UI. The final submitted Run 13 validation intentionally measured one canonical single-prompt round-trip to show judges that the mobile path works end-to-end. Cross-model routing is not part of this submission's Cactus deliverable; the broader project does match query difficulty to deployment tier (cloud 26B A4B for tool-grounded queries, on-device E4B for typical chat-length advice), but that routing is documented as a project-architecture pattern across the deployment matrix above rather than wired into the Cactus app itself.
 
-For the **native mobile** Phone tier, SolarHive targets the Cactus Special Technology Track via [Cactus Compute](https://cactuscompute.com/) ([GitHub](https://github.com/cactus-compute/cactus)) — a mobile-first inference runtime that targets ARM SoCs across Apple Silicon Macs, iPhones / iPads, Vision Pro, and Android ARM64 devices, with hardware acceleration via integrated NPUs (Apple Neural Engine, Qualcomm Hexagon, MediaTek/Exynos APU). Cactus's [supported-models table](https://github.com/cactus-compute/cactus) lists `google/gemma-4-E4B-it`, so the SolarHive fine-tune ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) drops in via `cactus convert ... --precision INT4`.
+For the native mobile tier, the project used [Cactus](https://github.com/cactus-compute/cactus) to convert the fine tuned E4B weights ([`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama)) to an INT4 artifact. The repository records one prompt on one Android device. It does not establish compatibility across every platform or accelerator listed by Cactus.
 
 **Notebook:** [`solarhive_e4b_cactus.ipynb`](solarhive_e4b_cactus.ipynb) covers the full Cactus deployment pipeline end-to-end:
 
@@ -620,7 +607,7 @@ For the **native mobile** Phone tier, SolarHive targets the Cactus Special Techn
 6. Run a 10-prompt smoke test via the Cactus Python SDK (Class A — five domain Q&A probes; Class B — five SolarHive emoji-format prompts)
 7. Emit a three-outcome quality verdict
 
-**Validated on Colab Pro CPU + High-RAM — convert path; ARM-only build + Python SDK smoke test gracefully skipped on x86 (`archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb`):**
+**Colab conversion results (`archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026.ipynb`). The ARM build and Python SDK smoke test were skipped on the x86 host:**
 
 - Install + auth + 16 GB safetensors download: **passed** (~1 min total)
 - `cactus convert ... --precision INT4`: **passed** (exit 0, 274s ≈ 4.5 min; observed 4–7 min range across runs)
@@ -630,7 +617,7 @@ For the **native mobile** Phone tier, SolarHive targets the Cactus Special Techn
 
 **Why two steps skip on x86 dev hosts.** The Cactus C++ engine targets ARM platforms by design — its CMake build hardcodes `-march=armv8.2-a+i8mm` and the SIMD kernels use ARM intrinsics with no x86 fallback. The official [Cactus Gemma 4 deployment blog](https://docs.cactuscompute.com/v1.14/blog/gemma4/) states verbatim: *"Cactus targets ARM across platforms: Apple Silicon Macs, iPhones, iPads, Vision Pro, and Android devices with ARM64 chipsets."* On x86 development hosts (Colab CPU/GPU runtimes, x86 servers) the build step + Python SDK smoke test gracefully skip; the convert step is pure-Python and runs anywhere, producing a deployable artifact for the companion Flutter Android app.
 
-**Why the build step + Python SDK code stays in source.** The notebook keeps the full deployment pipeline visible so judges can read the Cactus integration end-to-end (the build invocation, the Python SDK calls, the prompt classes, the verdict logic), gated behind a runtime check (`_IS_ARM_HOST = platform.machine().lower() in ("aarch64", "arm64", "armv8")`). On ARM hosts (Apple Silicon Mac, Pi 5, Android emulator on ARM, ARM cloud VM) the same notebook runs end-to-end — build, smoke test, three-outcome quality verdict. The platform-gated design means the GitHub repo demonstrates the complete on-device deployment story regardless of where the reader runs the notebook.
+**Why the ARM code remains in the notebook.** The notebook includes the intended ARM build and SDK steps behind a platform check. Those steps were not run in the archived x86 notebook. They require a separate ARM test.
 
 The companion **Flutter Android app** ([`mobile-cactus/`](mobile-cactus/)) loads the converted artifact on first launch and runs end-to-end inference on real ARM hardware. The 10 prompt quality gate in the notebook (Class A ≥4/5 + Class B ≥3/5) has not been run on a device. The on device validation used one prompt.
 
@@ -655,15 +642,15 @@ The sideloaded APK opens directly to a **multi-turn chat UI**. For the submitted
 | sysFree throughout (system-wide `MemAvailable` from `/proc/meminfo`, lowest observed) | always ≥3.5 GiB |
 | Crash signals (`SIGABRT` / `SIGKILL` / lmkd) | zero |
 
-**Sample on-device response** (excerpt from the chat UI, prompt: *"What is solar GHI?"*): *"Global Horizontal Irradiance (GHI) is the total solar radiation received on a horizontal surface, averaged over the day. It's a useful metric for long-range forecasting because it doesn't depend on your specific roof tilt or orientation. In Ann Arbor, MI, you might forecast 500-700 W/m2 GHI for a typical summer day. This translates to roughly 35-45 degrees from the horizon to your optimally tilted panels … For daily planning, use GHI forecasts to set production targets for the 24-hour period, rather than just hourly predictions."* The quote contains an ellipsis, so it may not be the full reply. The reply contains factual errors. For example, it describes GHI as a daily average, and the sentence about 35 to 45 degrees does not follow from GHI. No answer quality was scored on device. Captured on screen in the [final-run response screenshot](archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026_response.jpeg).
+**Sample on device response:** The captured reply contains factual errors about GHI and panel tilt. The project did not score answer quality on the device. See the [response screenshot](archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026_response.jpeg).
 
 ![Final-run on-device response — Android sideload test](archive/final_run/4_solarhive_e4b_cactus_finalrun_May2026_response.jpeg)
 
-The structural finding from the cycle-time decomposition is that **~99.88% of any chat round-trip lives inside the Cactus C engine** (`cactus_init` cold-load prefix + `cactus_complete` forward pass) — UI / Dart / rendering overhead is ~0.1% of the cycle and structurally not a viable optimisation surface. Throughput improvement at the on-device tier therefore comes from either tuning `contextSize` / `maxNewTokens` or upgrading the Cactus runtime build. Full empirical baselines including the `contextSize`-to-throughput characterisation (each doubling of `contextSize` roughly halves throughput on Snapdragon 865, because the Cactus runtime pre-allocates KV cache buffers and iterates per-step attention over the full `contextSize` regardless of actual usage) and the 15-key Cactus envelope schema empirically discovered live in the [HF model card](https://huggingface.co/Truthseeker87/solarhive-e4b-cactus). The sideloaded build is downloadable from the [v1.0-mobile-cactus GitHub Release](https://github.com/youshen-lim/the-gemma4-good-hackathon-solarhive/releases/tag/v1.0-mobile-cactus).
+In the reported single prompt run, 99.88% of the measured cycle occurred inside the `generate` call. The value comes from the Hugging Face card, and no device log is committed here. One run does not establish the cause of latency or predict the effect of configuration changes. The sideloaded build is available from the [v1.0-mobile-cactus GitHub Release](https://github.com/youshen-lim/the-gemma4-good-hackathon-solarhive/releases/tag/v1.0-mobile-cactus).
 
-**Cross-runtime system-prompt parity.** The on-device system prompt is a deliberately-narrowed variant of the cloud inference pipeline's `SYSTEM_PROMPT` constant — same SolarHive identity, same community facts (12 homes, Ann Arbor, rooftop solar + shared battery), same response-length guidance, same Kaggle-recommended Gemma 4 sampling defaults (`temperature=1.0`, `top_p=0.95`, `top_k=64`). Two intentional divergences keep on-device behaviour predictable: (1) the cloud's "call available tools" instruction is dropped because the on-device tier has no tools wired (tool-calling is a cloud-only capability — it requires live API access to OpenWeatherMap, EIA, NREL, etc.); (2) "reference actual data" → "reference reasonable assumptions" because the on-device tier has no live API access. The cloud benchmark results do not apply to the on device tier. The on device tier uses a different model size (E4B instead of 26B A4B), INT4 weights and no tools.
+**System prompt differences:** The device prompt retains the SolarHive identity and community facts but removes tool instructions because the device tier has no tools. It also requests assumptions instead of live data. Cloud benchmark results do not apply to this E4B INT4 device tier.
 
-**Prompt-repetition technique.** The on-device tier mirrors the cloud's "Prompt Repetition" pattern: the system body is concatenated to itself, separated by a blank line, and sent as a single `system`-role message — the same pattern used by `solarhive_inference.py` so cloud and on-device prompt regimes stay aligned. This adapts the prompt repetition idea in Leviathan, Kalman & Matias (2025), *Prompt Repetition Improves Non-Reasoning LLMs*, Google Research, [arXiv:2512.14982](https://arxiv.org/abs/2512.14982). The paper repeated the full input query, not the system prompt. It reported 47 wins and 0 losses in 70 benchmark and model combinations. The paper did not test system prompt repetition. This project did not measure its effect.
+**Prompt repetition:** The device code repeats the system prompt. This adapts an idea from Leviathan, Kalman & Matias (2025), *Prompt Repetition Improves Non-Reasoning LLMs*, Google Research, [arXiv:2512.14982](https://arxiv.org/abs/2512.14982). The cited paper repeated the full input query, not the system prompt. This project did not measure the effect of its variation.
 
 **Library versioning note.** The deployed `libcactus.so` binary on the companion app is built locally from [cactus-compute/cactus](https://github.com/cactus-compute/cactus) at a pinned commit via the Android NDK cross-compile toolchain. The pub.dev [`cactus 1.3.0`](https://pub.dev/packages/cactus) Flutter package is several months older than the converter that produced the artifact and has both a different `cactus_init` ABI and an incompatible weight-file header layout. Pinning the convert tool, the `libcactus.so` binary, and the Dart `cactus.dart` bindings to a single Cactus commit is the way to avoid the version drift; full build recipe + reproduction instructions live in the [`mobile-cactus/` README](mobile-cactus/) and the [HF model card](https://huggingface.co/Truthseeker87/solarhive-e4b-cactus).
 
@@ -684,7 +671,7 @@ The structural finding from the cycle-time decomposition is that **~99.88% of an
 
 For the **mobile / single-board / browser** edge tiers, SolarHive targets the LiteRT Special Technology Track via [Google AI Edge LiteRT-LM](https://ai.google.dev/edge/litert-lm) ([repository](https://github.com/google-ai-edge/LiteRT-LM)) — Google's first-party Gemma 4 edge inference framework, with SDK families for Android (Kotlin), iOS / macOS (C++; Swift APIs upcoming), Linux Python on edge hardware (Raspberry Pi 5, NVIDIA Jetson Orin Nano Super, laptops), Windows Python (upcoming), and Web (via the companion `.task` bundle on WebGPU). The April 2, 2026 Google Developers Blog [*"Bring state-of-the-art agentic skills to the edge with Gemma 4"*](https://developers.googleblog.com/bring-state-of-the-art-agentic-skills-to-the-edge-with-gemma-4/) endorses LiteRT-LM as the canonical mobile-edge runtime for Gemma 4 agentic workflows.
 
-**Crucially, the LiteRT tier ships the upstream pre-converted base Gemma 4 E4B `.litertlm` bundle from [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm)**, *not* the SolarHive fine-tune. This is a deliberate asymmetry from the other Special Tech tiers (Cactus mobile, Ollama, llama.cpp, microgrid hub), which all ship the SolarHive fine-tune end-to-end. The asymmetry is driven by upstream conversion-tooling availability — see *"Why the LiteRT tier uses base, not fine-tuned"* below for the verified gap, and *"Next iteration — fine-tuned LiteRT-LM bundle (pending steps)"* for the planned follow-up. The SolarHive engineering layer sits **on top** of the upstream base bundle: a runtime system prompt + on-device agentic loop with native function calling + emoji-format UX. The design goal is one bundle and one agentic loop shape across several LiteRT-LM SDK targets. The runtime demo below ran only on Colab x86_64 Linux.
+The LiteRT experiment uses the upstream base Gemma 4 E4B bundle from [`litert-community/gemma-4-E4B-it-litert-lm`](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm), not the SolarHive fine tune. It ran only on Colab x86 Linux. Current [LiteRT Torch releases](https://github.com/google-ai-edge/litert-torch/releases/) list Gemma 4 export support, but this project has not attempted a new fine tune conversion with that support.
 
 #### Runtime demo on LiteRT-LM Python
 
@@ -696,7 +683,7 @@ For the **mobile / single-board / browser** edge tiers, SolarHive targets the Li
 - **Tool-call format: 9/9 native curly-wrapped, 0 parens drift** — base Gemma 4 E4B held the documented `<|tool_call>call:fn{...}<tool_call|>` format perfectly across every benchmark round; the parens-fallback regex shipped as belt-and-suspenders was empirically unused
 - **Decode speed: 8.29 tokens per second (median) on a Colab x86_64 CPU.** Each benchmark prompt took 51 to 81 seconds end to end. The median time to first token was 41.38 seconds. Google's published figures for ARM devices (for example, 3.2 tokens per second on a Raspberry Pi 5) come from different hardware and are not directly comparable.
 - **Engine cold-start: 15.32s** | **Warmup TTFT: 2.63s** | **Bundle download: 22.5s** for the 3.66 GB `.litertlm`
-- **Multi-Token Prediction probe: graceful skip with the architecturally correct *"drafter pairing required"* message**. MTP is implemented as a paired drafter model artifact (see the *"Caveat — Multi-Token Prediction (MTP) drafters"* subsection later in this README), not as a runtime kwarg on a single bundle; pairing a drafter is part of the next-iteration plan below
+- **Multi Token Prediction probe:** The runtime skipped this probe because it requires a paired drafter artifact. The project did not test drafter pairing.
 - **Multi-modal VQA probe: graceful skip on auth.** The sky-photo dataset was private at the time of the run. It is now public. The cell skipped and the rest of the run continued.
 - **When2Call sub-bench: 1 of 3 (automated score).** Probe (b) ✅ correct tool routing; probe (c) auto-filled defaults instead of asking ❌; probe (d) replied *"I do not have a tool available to retrieve real-time air quality data..."*, but the scorer's keyword list missed *"do not"*. A manual review judged the (d) reply correct. The automated score is 1 of 3.
 
@@ -746,11 +733,11 @@ LiteRT is purpose-built for on-device Gemma 4 inference where Cactus, Ollama, an
 - **WebGPU acceleration** — Chrome / Edge auto-route inference to the integrated GPU; mobile Chrome on Android also activates WebGPU on supported GPUs.
 - **Privacy by construction** — all inference happens on the user's device; no API key in page source, no model weights leave the local process. Aligns directly with the SolarHive *"local-first, privacy-first"* posture that motivates the Special Tech Track strategy across Ollama, llama.cpp, Cactus, and LiteRT.
 - **Open standards, no vendor lock-in** — MediaPipe Tasks API + [WebGPU](https://www.w3.org/TR/webgpu/) spec; no proprietary SDK to license. Works offline once the bundle is browser-cached.
-- **Bundle-reuse pattern** — the [litert-community HF org](https://huggingface.co/litert-community) curates pre-converted production bundles for both [E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) (~2.6 GB) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) (~3.66 GB), Apache-2.0. The SolarHive UX wrapper inherits Google's conversion + benchmarking work for free — a fast-path that simply does not exist for Cactus / Ollama / llama.cpp.
+- **Upstream bundles:** The [litert-community](https://huggingface.co/litert-community) organization publishes converted [E2B](https://huggingface.co/litert-community/gemma-4-E2B-it-litert-lm) and [E4B](https://huggingface.co/litert-community/gemma-4-E4B-it-litert-lm) bundles. SolarHive used the E4B bundle and did not perform that conversion.
 
 #### Browser companion ([`web-litert/`](web-litert/))
 
-The browser app loads the upstream `.task` bundle via [`@mediapipe/tasks-genai`](https://www.npmjs.com/package/@mediapipe/tasks-genai) on WebGPU, applies the SolarHive system prompt, and renders a single unified chat interface for all user groups. [`web-litert/app.js`](web-litert/) ports `_extract_tool_calls` + `_parse_tool_args` from [`solarhive_inference.py`](solarhive_inference.py) Cell 4 line-for-line — same wrapped + bare regex fallback, same `<|"|>` string-arg delimiters with `re.DOTALL` semantics (JS dotall flag), same negative-number / boolean / null type coercion. The on-device `runAgenticLoop()` runs up to 3 rounds calling `get_solar_production` (Open-Meteo, keyless, CORS-friendly — same `SYSTEM_EFF=0.85` factor and Fahrenheit-threshold-77 temperature derating as the Python canonical) and `get_battery_state` (session simulator with `random.uniform(55, 85)` initial SOC matching `_BatterySimulator`). **Numerically equivalent outputs** to the cloud + hub variants for these two tools — one agentic-loop semantics, two edge runtimes (browser via MediaPipe Tasks Web, native via LiteRT-LM Python). Keyed tools (`get_weather` / OWM, `get_grid_status` / EIA, `get_nrel_pvwatts_baseline` / NREL) live server-side; **no API keys ever appear in browser source**. The browser companion mirrors the Cactus Flutter app at [`mobile-cactus/`](mobile-cactus/). It offers one unified UX surface, two complementary edge runtimes (Cactus on mobile ARM, LiteRT on browser + Python edge).
+The browser code in [`web-litert/`](web-litert/) loads an upstream base E4B bundle and implements local solar and battery tools. No browser test results are published. The solar tool currently shares the Fahrenheit derating bug described in Known Limitations, so this README does not claim numerical equivalence with another runtime.
 
 **Citation.** Per the [LiteRT homepage](https://ai.google.dev/edge/litert), [LiteRT-LM repository](https://github.com/google-ai-edge/LiteRT-LM), and the April 2, 2026 Google Developers Blog:
 
@@ -960,8 +947,7 @@ methodology documented in [`data_principles.md`](data_principles.md).
 ## Data Pipeline Diagnostics (14 Charts from `solarhive_datagen.py`)
 
 All charts generated automatically from live API data during training
-data generation. These visualizations validate data quality, reveal
-geographic patterns, and cross-validate between independent sources.
+data generation. These charts summarize the generated data. They do not validate data quality or the physical accuracy of the formulas.
 
 ### Solar Irradiance & Production
 
@@ -979,23 +965,23 @@ geographic patterns, and cross-validate between independent sources.
 | ![Correlation Matrix](datagen_charts/chart_05.png) | ![Cloud Cover by Season](datagen_charts/chart_06.png) |
 | **Chart 5:** Feature correlation matrix. GHI→production r=0.97 (near-perfect). Humidity→GHI r=−0.58 (clouds trap moisture). Cloud cover weakly anti-correlated with GHI (r=−0.21) because GHI captures direct + diffuse radiation | **Chart 6:** Cloud cover distribution by season and location. Ann Arbor consistently cloudier than San Mateo across all seasons |
 | ![Seasonal Production](datagen_charts/chart_07.png) | ![GHI vs Production](datagen_charts/chart_08.png) |
-| **Chart 7:** Daytime (7am-6pm) production by season. Summer median ~33 kW (Ann Arbor) vs ~26 kW (San Mateo). Winter drops to ~12 kW for both | **Chart 8:** GHI vs production scatter, colored by cloud cover. Two distinct bands: clear-sky (red, tight linear) and cloudy (blue, scattered). Demonstrates the physics of diffuse vs direct radiation |
+| **Chart 7:** Daytime production values by season in the generated data. | **Chart 8:** Generated GHI and production values form separate clear and cloudy bands. |
 
 ### Cross-Validation & Grid Analysis
 
 | | |
 |:---:|:---:|
 | ![PVWatts Cross-Validation](datagen_charts/chart_09.png) | ![OWM Conditions](datagen_charts/chart_10.png) |
-| **Chart 9:** Monthly production — Open-Meteo vs NREL PVWatts. Strong seasonal agreement validates our GHI-based formula against NREL's industry-standard model | **Chart 10:** OWM current conditions snapshot at data generation time — temperature, clouds, wind, humidity for both locations |
+| **Chart 9:** Monthly output from the project formula and PVWatts follows a similar seasonal pattern. The project formula contains the documented temperature derating bug, so this chart does not validate it. | **Chart 10:** OWM conditions captured during data generation, including temperature, clouds, wind and humidity. |
 | ![Grid Fuel Mix](datagen_charts/chart_11.png) | ![Renewable & CO2](datagen_charts/chart_12.png) |
-| **Chart 11:** Average fuel mix — MISO (33.5% natural gas, 23.4% wind, 18.8% coal) vs CAISO (35.8% solar, 20.6% wind). CAISO's grid is dramatically cleaner | **Chart 12:** Renewable % and CO2 intensity over one week. CISO hits 100% renewable during midday solar peaks; MISO ranges 20-50%. CO2 intensity inversely tracks renewable share |
+| **Chart 11:** Fuel mix values captured for MISO and CAISO during data generation. | **Chart 12:** Renewable share and CO2 intensity values captured over one week. |
 
 ### Atmospheric Decomposition
 
 | | |
 |:---:|:---:|
 | ![Irradiance Triple](datagen_charts/chart_13.png) | ![Cloud Cover Stack](datagen_charts/chart_14.png) |
-| **Chart 13:** Irradiance decomposition on a clear summer day — total GHI separated into direct-beam (DNI) and diffuse (DHI) components. Confirms the model trains on physically-decomposed solar radiation, not just total GHI, which matters for cloudy-day production estimates where diffuse dominates | **Chart 14:** Vertical cloud-cover composition by month (low / mid / high stratification). Low stratus (<3 km) attenuates GHI more aggressively than high cirrus (>8 km); the dataset exposes the model to seasonal shifts in cloud-layer composition, not just total cloud percentage |
+| **Chart 13:** The generated data includes GHI, DNI and DHI fields for one clear summer day. | **Chart 14:** The chart summarizes generated low, middle and high cloud cover fields by month. |
 
 ---
 
@@ -1093,7 +1079,7 @@ The Hugging Face model cards currently label some of these cloud results "inferr
 - Three probes, one run and a lenient matcher cannot show that a merge or quantization step is lossless. They also cannot show that the gap comes from model size.
 - The A4B LoRA passed probe (c) in notebook 3, cell 33, with a reply that filled in Ann Arbor figures. That is the behavior the probe is meant to reject. The GGUF harness comment also records a strict score of 1 of 3 for E4B merged (`solarhive_inference_e4b_gguf_ollama.py` line 1561).
 
-A4B's (d) response on the AQI probe disclaims explicitly: *"I don't have a dedicated air quality tool, but I can check the weather — which includes haze and visibility data — to infer conditions."* This matches the (d) behavior the paper describes. E4B's (d) response in this final run also disclaims and does not fabricate data. On the cloud E4B variants, probe (c) was the only failure.
+A4B stated that it had no air quality tool and offered to check weather data instead. E4B also declined that request and did not fabricate data. The cloud E4B variants failed only probe (c) in this run.
 
 **Finding for deployment:** On these probes, the cloud E4B variants failed probe (c) and the E4B GGUF failed probe (d). The A4B variants passed all three. The result is consistent with the idea that smaller models more readily fill in missing parameters. It does not confirm that idea. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's *follow-up clarification* example count (currently 6) and *unable-to-answer* count (currently 10) to close the gap.
 
@@ -1117,7 +1103,7 @@ target.generate(**inputs, assistant_model=assistant)  # MTP enabled
 
 Two optional knobs are also exposed: `num_assistant_tokens` (the γ parameter from the paper) and `num_assistant_tokens_schedule = "heuristic" | "constant"` for dynamic adjustment. The `"heuristic"` schedule increases γ by 2 when the target accepts every draft token and decreases by 1 whenever it rejects any — a runtime adaptation that maps directly to the paper's Section 3.5 suggestion of varying γ during inference.
 
-**What the measured numbers above include — and what they don't.** The cloud transformers benchmarks and the GGUF Ollama benchmark were both completed before May 5, 2026 and capture **standard autoregressive decoding only** — no MTP. This README does not report measured decode latency for the GGUF or cloud variants. Any speedup from paired drafters is untested for SolarHive.
+**Scope of the measurements:** The cloud and GGUF runs used standard autoregressive decoding. SolarHive did not measure MTP speedup or decode latency for those variants.
 
 **Future iteration.** The MTP integration ships as a gated cell (`§14`, `_RUN_MTP_DEMO = False`) in [`solarhive_inference.py`](solarhive_inference.py) so reviewers can audit and reproduce the path; it is deliberately kept out of the measured benchmark numbers above. **The cell's target loads [`Truthseeker87/solarhive-26b-a4b-merged`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged)** paired with Google's released base-paired drafter [`google/gemma-4-26B-A4B-it-assistant`](https://huggingface.co/google/gemma-4-26B-A4B-it-assistant). Per Leviathan, Kalman & Matias 2023, correctness is invariant to drafter quality — the target's verification step preserves the exact output distribution regardless of what the drafter proposes. What can vary is **acceptance rate α**, since the released drafter was trained against the base `gemma-4-26B-A4B-it`, not against the LoRA-fine-tuned merged target. **Measured α and the resulting walltime speedup against a domain-fine-tuned target are the planned post-hackathon contribution.** A documented post-hackathon trajectory — drafter distillation against the SolarHive merged target plus a cross-variant α-measurement table across the cloud and edge artifacts — is sketched in the project's research notes; the cross-runtime story (LiteRT-LM, MLX, vLLM public APIs for paired drafters are still landing) is part of the same iteration.
 
@@ -1135,30 +1121,11 @@ The full execution notebooks (cell-by-cell outputs from the runs that produced t
 
 For the 6th deployment variant (local-laptop CPU GGUF via Ollama), see [`solarhive_inference_e4b_gguf_ollama.py`](solarhive_inference_e4b_gguf_ollama.py) at the project root. It is a runnable pytest harness that produces the GGUF benchmark + an auto-generated MD report when run against a local Ollama instance. The report from the GGUF run cited in this README is not committed.
 
-#### Hypothesis: A4B was expected to outperform smaller variants on reasoning-heavy probes
+#### Model size context
 
-The A4B-outperforms-E4B outcome on the When2Call (c)+(d) probes was the **expected hypothesis going in**, not a surprise discovery. Two independent sources predict it:
+Google reports higher base model benchmark scores for 26B A4B than for E4B on MMLU Pro, MMMU Pro, AIME 2026 and LiveCodeBench v6 ([Gemma 4 model card](https://gemma.ai/models/gemma-4/model-card/)). These upstream scores do not predict SolarHive When2Call behavior.
 
-1. **Google's own Gemma 4 documentation** — from the [official Gemma 4 Core docs](https://ai.google.dev/gemma/docs/core) under *"Parameter sizes and quantization"*:
-
-   > *"Gemma 4 models are available in 4 parameter sizes: E2B, E4B, 31B and 26B A4B. The models can be used with their default precision (16-bit) or with a lower precision using quantization. The different sizes and precisions represent a set of trade-offs for your AI application. **Models with higher parameters and bit counts (higher precision) are generally more capable, but are more expensive to run** in terms of processing cycles, memory cost and power consumption. Models with lower parameters and bit counts (lower precision) have less capabilities, but may be sufficient for your AI task."*
-
-2. **The [When2Call paper](https://arxiv.org/abs/2504.18851) (Ross et al. 2025)** documents the same size-vs-refusal scaling pattern empirically across community models — smaller models with less reasoning depth more readily hallucinate plausible-sounding data on under-specified or out-of-scope queries.
-
-Per the [Google Gemma 4 model card](https://ai.google.dev/gemma/docs/core/model_card_4), the four BF16-native release variants differ in capacity by an order of magnitude:
-
-| Variant | Total params | Active / effective per token | Architecture | Vision encoder |
-|---|---:|---:|---|---:|
-| **E2B** | 5.1B | 2.3B effective (PLE) | Dense + PLE | ~150M |
-| **E4B** | 8B | 4.5B effective (PLE) | Dense + PLE | ~150M |
-| **26B A4B** (chosen for SolarHive cloud) | 25.2B | 3.8B active (8/128 + 1 shared experts) | MoE | **~550M** |
-| **31B** | 30.7B | 30.7B | Dense | ~550M |
-
-The 26B A4B picked for the SolarHive cloud demo activates only **3.8B parameters per token** at inference (MoE sparsity, comparable runtime cost to E4B's 4.5B effective) but accesses ~25B total knowledge capacity and a **3.7× larger vision encoder** than E4B. SolarHive's hypothesis going into the multi-variant validation: on reasoning-heavy probes — When2Call (c) follow-up questioning, (d) refusal-vs-fabrication — A4B would outperform E4B because the official docs explicitly describe parameter count as the capability dimension, AND the paper documents exactly this scaling pattern. The same fine tune recipe gave 3/3 on A4B and 2/3 on E4B. The result is consistent with the hypothesis. It does not confirm it, because the test has three probes and one run.
-
-**Empirical reinforcement from Unsloth's published Gemma 4 benchmarks** ([unsloth.ai/docs/models/gemma-4](https://unsloth.ai/docs/models/gemma-4)) — the 26B A4B leads E4B by **+13.2 pts on MMLU Pro** (82.6% vs 69.4%), **+21.2 pts on MMMU Pro** (73.8% vs 52.6%), **+45.8 pts on AIME 2026** (88.3% vs 42.5%), and **+25.1 pts on LiveCodeBench v6** (77.1% vs 52.0%). These gaps motivated the hypothesis that A4B would do better on the [When2Call](https://arxiv.org/abs/2504.18851) (c) and (d) probes. A one probe difference on a three probe test cannot confirm a scaling relation.
-
-The proposed deployment routing matches query difficulty to model capacity: well-specified queries hit E4B at the edge, under-specified or out-of-scope queries escalate to A4B in the cloud. Same fine-tune across both — the routing is what changes.
+In one SolarHive run, the A4B variants scored 3 of 3 and the E4B variants scored 2 of 3 on three lenient probes. The probes were not held out. This result does not establish a scaling relationship or a deployment routing rule.
 
 **Defensive dispatch:** the May 2026 validation run executed without `TypeError` from hallucinated tool kwargs (the `_safe_tool_call` defensive dispatcher in Cell 3 filters argument lists against each function's signature) or `KeyError` from pure-tool model responses (the `parsed.get("content", "")` pattern at all four `parse_response()` callsites returns the empty string when the response is tool-only). No regression tests for these safety nets are committed to this repository.
 
@@ -1256,11 +1223,7 @@ can re-enable image rows without changing the corpus.)
 
 The training dataset is the canonical
 [`solarhive-community-solar-multimodal`](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal)
-repository (1,727 rows). All hand-crafted training rows are also
-preserved verbatim in `solarhive_datagen.py` Cell 7a as
-`LEGACY_DATA` + `LEGACY_TOOL_CALL_DATA`, so the dataset is
-fully reproducible from the version-controlled data-generation
-pipeline.
+repository (1,727 rows). `LEGACY_DATA` and `LEGACY_TOOL_CALL_DATA` in `solarhive_datagen.py` Cell 7a preserve the hand written rows in source control. A current data generation rerun requires the NLR host fix described in Known Limitations. Exact reproduction has not been tested.
 
 The canonical dataset holds **1,713 text rows + 14 image-grounded Q&A
 turns** from 7 Ann Arbor sky photographs. Image-corpus sourcing went
@@ -1329,8 +1292,7 @@ project has not produced such data.
 
 ## What SolarHive Does NOT Solve
 
-SolarHive is an open-source intelligence and optimization layer. It is
-important to be clear about what it does not do:
+SolarHive is an open source learning prototype for community solar advice. It does not optimize or control real energy equipment. This section lists what it does not do:
 
 - **Does not change the fundamental physics of solar cell efficiency.**
   The Shockley–Queisser theoretical limit of ~33% for single-junction
@@ -1345,9 +1307,7 @@ important to be clear about what it does not do:
   transformers, and interconnection agreements between households
   require separate engineering and permitting.
 
-- **Does not replace utility-scale grid management.** SolarHive
-  operates at the community level (12–200 homes). Regional grid
-  balancing remains the responsibility of utilities and grid operators.
+- **Does not replace utility grid management.** The prototype models 12 homes. It has not been tested with a real community or utility.
 
 - **Does not control real equipment.** The battery is a simulator. The
   prototype does not read real meters or dispatch real storage.
@@ -1513,19 +1473,33 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | LiteRT converter | No public conversion path exists | True in May 2026. Current LiteRT Torch releases list Gemma 4 support. Needs a new attempt. | LiteRT Torch releases |
 | LiteRT throughput | 2.6 times headroom over Pi 5; same class as mobile CPUs | 8.29 tokens per second on x86 Colab CPU. Median time to first token 41.38 s. Not comparable with ARM figures. | Different hardware |
 | Cactus status | Flutter app in development; on device quality gate exercised | APK released. One prompt on one device. Quality gate not run on device. | README sections disagreed |
-| Jetson tier | GGUF directly deployable today | Not tested | No Jetson run exists |
+| Jetson tier | GGUF directly deployable today; $249 kit price | Not tested. Price removed; see current vendor pricing. | No Jetson run exists. The price was not rechecked against a current listing. |
 | Prompt repetition | Doubling the system prompt won 47 of 70 | The paper repeated the full query. This project did not measure system prompt repetition. | arXiv 2512.14982 |
 | Feature 1 quote | "72 kW array" | Verbatim "60 kW array" with a note | The quote had been edited |
 | VQA examples | Mode 2 and Mode 3 replies shown as capability | Labeled illustrative. VQA not scored. | Notebook 3 used placeholder images |
 | Decode latency | 2 to 6 s per answer | Removed | No measurement in the repository |
 | Test file | `tests/test_inference_script.py` with 24 tests | Removed | File not in the repository |
-| Reproducibility | Weights re-derived bit identically | Exact deterministic reproduction not tested | No rerun was done |
+| Reproducibility | Weights re-derived bit identically; dataset "fully reproducible" from the pipeline | Exact reproduction not tested. A data rerun needs the NLR host fix. | No rerun was done. The code still calls the retired API host. |
 | Private assets | Dataset and weights private until submission; HF token required | Public; HF token optional | Hugging Face pages are public |
 | Impact figures | Curtailment, CO2, price and return figures | Removed. Only the 94,501 kWh PVWatts baseline is kept. | No sources cited |
 | Links | `../mobile-cactus/`, `ai-edge-torch` examples path, unpublished `solarhive-e2b-merged` | `mobile-cactus/`, `litert-torch`, E2B link removed | Broken or unpublished links |
 | Repository tree | Three archive notebooks with old names | Current file list | Stale |
+| Community storage | Storage ensures "no generated watt is wasted" | The prototype simulates a shared battery. No savings are measured. | The battery is a simulator |
+| E4B memory | Fits T4 in 4 bit (about 12 GB) | Removed. T4 memory use was not measured. | No T4 run in the repository |
+| Model selection | 26B A4B gives the best capability to cost ratio | Benchmarks give selection context only. Cost was not measured. | No cost measurement |
+| 26B A4B vision | Larger encoder delivers superior sky and panel analysis | Higher base model vision scores. SolarHive VQA was not scored. | Upstream scores do not measure SolarHive |
+| Model size and refusal | When2Call paper shows a size versus refusal scaling pattern; A4B runtime cost comparable to E4B | Removed. One run on three lenient probes. | The paper's results do not trend consistently with size (arXiv 2504.18851, Table 3). Runtime cost was not measured. |
+| E2B workflow | "Why this beats on device tool calling" | Planned design. Not tested. | No E2B build exists |
+| Cactus compatibility | The fine tune "drops in" via `cactus convert` | Converted to INT4. One prompt on one device. | No broader platform test |
+| Cactus notebook | "Validated"; the same notebook runs end to end on ARM | Conversion results only. ARM build and SDK test skipped. | The archived notebook ran on x86 |
+| On device latency | 99.88% of any chat round trip; tuning advice | One reported run. No cause or tuning effect is established. | Single run; no device log committed |
+| Browser tools | Numerically equivalent outputs to the cloud and hub | No equivalence claim. The solar tool shares the derating bug. | No browser test results; `web-litert/app.js` line 127 |
+| Chart captions | Charts validate data quality, the formula and the physics | Charts summarize the generated data | Charts do not test the formulas. Derating bug. |
+| Grid chart wording | CAISO grid "dramatically cleaner" | Neutral caption | Unsupported wording |
+| Project scope | Intelligence and optimization layer; operates at 12 to 200 homes | Learning prototype. Models 12 homes. | No equipment control; no real community test |
+| Location rationale | Suburban landscape eliminates shading; ideal testbed | Models suburban rooftop conditions. No shading survey. | No shading survey in the repository |
 
-I rechecked the scores, sizes, dataset counts, hardware, links and code paths against `archive/final_run/`, `solarhive_inference.py`, `solarhive_datagen.py`, `solarhive_inference_e4b_gguf_ollama.py` and the Hugging Face pages on November 20, 2026.
+I rechecked the scores, sizes, dataset counts, hardware, links and code paths against `archive/final_run/`, `solarhive_inference.py`, `solarhive_datagen.py`, `solarhive_inference_e4b_gguf_ollama.py` and the Hugging Face pages on November 20, 2026. I also rechecked the Gemma 4 model card, the When2Call paper, the LiteRT Torch releases, the NVIDIA Jetson specification page and the `solarhive-e4b-cactus` card on November 20, 2026.
 
 ---
 
