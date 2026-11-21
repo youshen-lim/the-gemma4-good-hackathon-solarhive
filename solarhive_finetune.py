@@ -619,24 +619,26 @@ def _fetch_api_examples():
     ))
 
     # ── 3. Temperature impact ───────────────────────────────────────────────────
-    if temp_f > 90:
-        derate = round((temp_f - 77) * 5 / 9 * 0.4, 1)
-        temp_note = (f"At {temp_f}°F, thermal derating is significant — panels lose ~{derate}% efficiency. "
-                     "AC demand across 12 homes will also be high; expect tight net production margins.")
-    elif temp_f > 77:
-        derate = round((temp_f - 77) * 5 / 9 * 0.35, 1)
-        temp_note = f"At {temp_f}°F there's minor derating (~{derate}%), but conditions remain productive."
-    elif temp_f >= 32:
-        temp_note = (f"At {temp_f}°F panels run cool — slightly better efficiency than the 77°F rating point. "
-                     "No thermal losses.")
+    # Report the same thermal loss the tool computed. temp_derate already uses
+    # the NOCT cell temperature estimate (air temperature plus sunlight and wind),
+    # so the text must not recompute loss from air temperature alone.
+    loss_pct = round((1 - temp_derate) * 100, 1)
+    if temp_f < 32:
+        temp_note = (f"At {temp_f}°F, check for ice or snow on panels. Snow cover can cut output to zero. "
+                     f"Estimated thermal loss is {loss_pct}%.")
+    elif loss_pct >= 10:
+        temp_note = (f"At {temp_f}°F, sunlight heats the cells well above the air, and the estimated thermal loss is {loss_pct}%.")
+        if temp_f > 90:
+            temp_note += " AC demand across 12 homes will also be high, so expect tight net production margins."
+    elif loss_pct > 0:
+        temp_note = (f"At {temp_f}°F, the estimated thermal loss is {loss_pct}%. Conditions remain productive.")
     else:
-        temp_note = (f"At {temp_f}°F, check for ice or snow on panels. Cold improves cell efficiency, "
-                     "but physical shading cuts output to zero.")
+        temp_note = (f"At {temp_f}°F, the estimated cell temperature stays at or below 25°C, so there is no thermal loss right now.")
 
     ex.append((SYS_,
         f"It's {temp_f}°F outside. How does temperature affect our solar output?",
         f"{temp_note} Current output: {prod_kw}kW. "
-        "Crystalline silicon loses ~0.35–0.45% per °C above 25°C (77°F)."
+        "Crystalline silicon loses about 0.4% per °C of cell temperature above 25°C, and cells in sun run well above the air temperature."
     ))
 
     # ── 4. Grid pricing strategy ────────────────────────────────────────────────

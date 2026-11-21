@@ -737,7 +737,7 @@ LiteRT is purpose-built for on-device Gemma 4 inference where Cactus, Ollama, an
 
 #### Browser companion ([`web-litert/`](web-litert/))
 
-The browser code in [`web-litert/`](web-litert/) loads an upstream base E4B bundle and implements local solar and battery tools. No browser test results are published. The solar tool currently shares the Fahrenheit derating bug described in Known Limitations, so this README does not claim numerical equivalence with another runtime.
+The browser code in [`web-litert/`](web-litert/) loads an upstream base E4B bundle and implements local solar and battery tools. No browser test results are published. The solar tool uses the same NOCT cell temperature derating as the Python tools (`tempDerate` in `web-litert/app.js`). No browser results are published, so this README does not claim numerical equivalence with another runtime.
 
 **Citation.** Per the [LiteRT homepage](https://ai.google.dev/edge/litert), [LiteRT-LM repository](https://github.com/google-ai-edge/LiteRT-LM), and the April 2, 2026 Google Developers Blog:
 
@@ -1554,7 +1554,7 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Cactus compatibility | The fine tune "drops in" via `cactus convert` | Converted to INT4. One prompt on one device. | No broader platform test |
 | Cactus notebook | "Validated"; the same notebook runs end to end on ARM | Conversion results only. ARM build and SDK test skipped. | The archived notebook ran on x86 |
 | On device latency | 99.88% of any chat round trip; tuning advice | One reported run. No cause or tuning effect is established. | Single run; no device log committed |
-| Browser tools | Numerically equivalent outputs to the cloud and hub | No equivalence claim. The solar tool shares the derating bug. | No browser test results; `web-litert/app.js` line 127 |
+| Browser tools | Numerically equivalent outputs to the cloud and hub | No equivalence claim. The solar tool uses the same NOCT derating as the Python tools. | No browser test results; `web-litert/app.js` lines 133 to 160 |
 | Chart captions | Charts validate data quality, the formula and the physics | Charts summarize the generated data | Charts do not test the formulas. Derating bug. |
 | Grid chart wording | CAISO grid "dramatically cleaner" | Neutral caption | Unsupported wording |
 | Project scope | Intelligence and optimization layer; operates at 12 to 200 homes | Learning prototype. Models 12 homes. | No equipment control; no real community test |
