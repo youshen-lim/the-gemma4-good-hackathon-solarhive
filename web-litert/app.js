@@ -109,15 +109,46 @@ const BATTERY = {
   capacity_kwh: 100,
 };
 
+// NOCT cell temperature model with the SAM wind term, mirroring NOCT_C,
+// _wind_factor, _cell_temp_c and _temp_derate in solarhive_inference.py
+// (November 20, 2026; sources and assumptions are listed there):
+//   T_cell = T_air + G / 800 * (NOCT - 20) * 9.5 / (5.7 + 3.8 * 0.51 * v10)
+// SAM Photovoltaic Model Technical Reference Update (NREL/TP-6A20-67399),
+// Section 10.6: https://docs.nlr.gov/docs/fy18osti/67399.pdf
+// NOCT_C = 49°C is the installed NOCT for a roof mount with about 4 inch
+// standoffs (PVWatts V5 Manual, NREL/TP-6A20-62641, Section 9:
+// https://docs.nlr.gov/docs/fy14osti/62641.pdf). G is plane of array
+// irradiance, approximated here by GHI. v10 is the 10 m wind in m/s; when it
+// is unknown, the wind factor is 1.0 (the NOCT rating wind of 1 m/s at module
+// height). The 0.75 floor is kept from the original code, not a cited value.
+const NOCT_C = 49;
+const WIND_HEIGHT_FACTOR = 0.51;  // SAM Eq. 10.35, one story or lower
+
+function windFactor(wind10mMs) {
+  if (!Number.isFinite(wind10mMs)) return 1.0;
+  const vAdj = WIND_HEIGHT_FACTOR * Math.max(0, wind10mMs);
+  return 9.5 / (5.7 + 3.8 * vAdj);
+}
+
+function cellTempC(tempAirC, poaWm2, wind10mMs = null, noctC = NOCT_C) {
+  const g = Number.isFinite(poaWm2) ? Math.max(0, poaWm2) : 0;
+  return tempAirC + (g / 800) * (noctC - 20) * windFactor(wind10mMs);
+}
+
+function tempDerate(tempAirC, poaWm2, wind10mMs = null, noctC = NOCT_C) {
+  const tCell = cellTempC(tempAirC, poaWm2, wind10mMs, noctC);
+  return Math.max(0.75, 1.0 - 0.004 * Math.max(0, tCell - 25));
+}
+
 async function tool_get_solar_production() {
   // Mirrors solarhive_inference.py get_solar_production():
   //   SYSTEM_EFF = 0.85  # inverter 97% × wiring 98% × soiling 97% × mismatch 98%
   //   temp_c = (temp_f - 32) * 5 / 9
-  //   temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
+  //   temp_derate = _temp_derate(temp_c, ghi, wind_ms)  # NOCT cell temperature
   //   production = max(0, COMMUNITY_CAPACITY_KW * (ghi / 1000) * SYSTEM_EFF * temp_derate)
   const COMMUNITY_CAPACITY_KW = 72;
   const SYSTEM_EFF = 0.85;
-  const url = "https://api.open-meteo.com/v1/forecast?latitude=42.2808&longitude=-83.7430&current=shortwave_radiation,temperature_2m,cloud_cover&timezone=America/Detroit";
+  const url = "https://api.open-meteo.com/v1/forecast?latitude=42.2808&longitude=-83.7430&current=shortwave_radiation,temperature_2m,cloud_cover,wind_speed_10m&wind_speed_unit=ms&timezone=America/Detroit";
   try {
     const resp = await fetch(url);
     if (!resp.ok) return { error: `Open-Meteo HTTP ${resp.status}` };
@@ -125,7 +156,8 @@ async function tool_get_solar_production() {
     const ghi = Number(data?.current?.shortwave_radiation ?? 0);
     const temp_c = Number(data?.current?.temperature_2m ?? 20);
     const temp_f = (temp_c * 9 / 5) + 32;
-    const temp_derate = Math.max(0.75, 1.0 - 0.004 * Math.max(0, temp_c - 25));
+    const wind_ms = Number(data?.current?.wind_speed_10m ?? NaN);  // m/s, 10 m
+    const temp_derate = tempDerate(temp_c, ghi, wind_ms);
     const production_kw = Math.max(
       0,
       Math.round(COMMUNITY_CAPACITY_KW * (ghi / 1000) * SYSTEM_EFF * temp_derate * 10) / 10,

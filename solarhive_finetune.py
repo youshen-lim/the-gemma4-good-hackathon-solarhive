@@ -430,20 +430,76 @@ TOOL_CALL_DATA = []  # Hand-crafted tool-calling examples are produced by
 # Appended to DATA before dataset construction — counted in final training total.
 
 
-def _get_current_ghi():
-    """Fetch current Global Horizontal Irradiance (W/m²) from Open-Meteo.
+def _get_current_ghi_and_wind():
+    """Fetch current GHI (W/m²) and 10 m wind speed (m/s) from Open-Meteo.
 
-    Free API, no key required. Same endpoint as solarhive_inference.py.
+    Free API, no key required (NOAA GFS + HRRR backed). GHI already accounts
+    for cloud thickness, sun angle, atmosphere and season. Returns
+    (ghi, wind_ms); either value is None when unavailable.
     """
     try:
         r = requests.get(
             "https://api.open-meteo.com/v1/forecast",
-            params={"latitude": LAT, "longitude": LON, "current": "shortwave_radiation"},
+            params={"latitude": LAT, "longitude": LON,
+                    "current": "shortwave_radiation,wind_speed_10m",
+                    "wind_speed_unit": "ms"},
             timeout=10,
         ).json()
-        return r["current"]["shortwave_radiation"]
+        current = r["current"]
+        return current["shortwave_radiation"], current.get("wind_speed_10m")
     except Exception:
-        return None
+        return None, None
+
+
+# Cell temperature model (November 20, 2026).
+# Panel temperature coefficients refer to CELL temperature, with Tref = 25°C
+# (PVWatts V5 Manual, Dobos 2014, NREL/TP-6A20-62641, Section 10, Eq. 8:
+# https://docs.nlr.gov/docs/fy14osti/62641.pdf). The derate therefore first
+# estimates cell temperature with the NOCT model and the SAM wind term
+# (SAM Photovoltaic Model Technical Reference Update, Gilman et al. 2018,
+# NREL/TP-6A20-67399, Section 10.6, Eqs. 10.35 and 10.37:
+# https://docs.nlr.gov/docs/fy18osti/67399.pdf; Sandia PVPMC NOCT page:
+# https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/cell-temperature/noct-cell-temperature/):
+#     T_cell = T_air + G / 800 * (NOCT - 20) * 9.5 / (5.7 + 3.8 * v_adj)
+#     v_adj  = 0.51 * v10   (array one story or lower above ground)
+# NOCT is rated at 800 W/m², 20°C air and 1 m/s wind (pvlib noct_sam docs:
+# https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.noct_sam.html).
+# Inputs and assumptions:
+# - NOCT_C = 49°C is the installed NOCT for a roof mount with about 4 inch
+#   standoffs (PVWatts V5 Manual, Section 9), matching the rooftop arrays and
+#   PVWatts array_type=1 (fixed roof mount). It is used as T_noct,adj.
+# - G is plane of array irradiance. The code approximates it with GHI.
+# - v10 is wind speed in m/s at 10 m, the standard weather file height
+#   (Open-Meteo wind_speed_10m). The 0.51 factor assumes a one story array.
+# - When wind is unknown, the wind factor is 1.0, which is the NOCT rating
+#   wind of 1 m/s at module height (pvlib noct_sam default). This assumption
+#   overstates cell temperature in typical daytime wind.
+# - The SAM term (1 - eta_ref / tau_alpha) is omitted (set to 1), so the
+#   model gives a higher cell temperature than SAM for the same inputs.
+# - The 0.75 floor is a guard kept from the original code, not a cited
+#   value; it binds only above a cell temperature of 87.5°C.
+NOCT_C = 49.0
+WIND_HEIGHT_FACTOR = 0.51  # SAM Eq. 10.35, one story or lower
+
+
+def _wind_factor(wind_10m_ms=None):
+    """SAM NOCT wind factor 9.5 / (5.7 + 3.8 * 0.51 * v10); 1.0 if wind is unknown."""
+    if wind_10m_ms is None or wind_10m_ms != wind_10m_ms:  # None or NaN
+        return 1.0
+    v_adj = WIND_HEIGHT_FACTOR * max(0.0, wind_10m_ms)
+    return 9.5 / (5.7 + 3.8 * v_adj)
+
+
+def _cell_temp_c(temp_air_c, poa_wm2, wind_10m_ms=None, noct_c=NOCT_C):
+    """Estimated cell temperature (°C) from the NOCT model with the SAM wind term."""
+    return (temp_air_c
+            + max(0.0, poa_wm2) / 800.0 * (noct_c - 20.0) * _wind_factor(wind_10m_ms))
+
+
+def _temp_derate(temp_air_c, poa_wm2, wind_10m_ms=None, noct_c=NOCT_C):
+    """Derate factor: 0.4% per °C of cell temperature above 25°C, floor 0.75."""
+    t_cell = _cell_temp_c(temp_air_c, poa_wm2, wind_10m_ms, noct_c)
+    return max(0.75, 1.0 - 0.004 * max(0.0, t_cell - 25.0))
 
 
 def _fetch_api_examples():
@@ -482,7 +538,7 @@ def _fetch_api_examples():
         print(f"  ℹ️  Using fallback weather: {desc}, {clouds}% clouds, {temp_f}°F")
 
     # Open-Meteo: GHI irradiance (free, no key — same as inference.py)
-    ghi = _get_current_ghi()
+    ghi, wind_ms = _get_current_ghi_and_wind()
 
     # Derived metrics — matches solarhive_inference.py production calculation
     SYSTEM_EFF = 0.85  # inverter × wiring × soiling × mismatch
@@ -491,11 +547,13 @@ def _fetch_api_examples():
     month   = now.month
     # Time factor (sun angle proxy) — always computed for training text descriptions
     tf = max(0.0, 1.0 - ((hour - 12) / 6) ** 2) if 6 <= hour <= 18 else 0.0
-    # Temperature derating: silicon panels lose ~0.4% per °C above 25°C (77°F)
+    # Temperature derating: silicon panels lose ~0.4% per °C of CELL
+    # temperature above 25°C. _temp_derate estimates cell temperature from
+    # air temperature and irradiance with the NOCT model.
     temp_c = (temp_f - 32) * 5 / 9
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
 
     if ghi is not None:
+        temp_derate = _temp_derate(temp_c, ghi, wind_ms)
         # GHI-based: satellite-measured irradiance (same formula as inference.py)
         prod_kw = round(max(0, COMMUNITY_CAPACITY_KW * (ghi / 1000) * SYSTEM_EFF * temp_derate), 1)
         eff_pct = round(prod_kw / COMMUNITY_CAPACITY_KW * 100, 1)
@@ -504,6 +562,10 @@ def _fetch_api_examples():
     else:
         # Fallback: cloud%-based estimate (matches inference.py fallback path)
         eff  = max(0.15, 0.85 - (clouds / 100) * 0.70)
+        # No measured GHI. For the NOCT model, use the irradiance this estimate
+        # implies when matched to the GHI formula: G = 1000 * eff * tf / SYSTEM_EFF.
+        # Wind is unknown here, so the NOCT rating wind applies (factor 1.0).
+        temp_derate = _temp_derate(temp_c, 1000 * eff * tf / SYSTEM_EFF)
         prod_kw = round(COMMUNITY_CAPACITY_KW * eff * tf * temp_derate, 1)
         eff_pct = round(eff * temp_derate * 100, 1)
         ghi_note = ""
@@ -557,24 +619,26 @@ def _fetch_api_examples():
     ))
 
     # ── 3. Temperature impact ───────────────────────────────────────────────────
-    if temp_f > 90:
-        derate = round((temp_f - 77) * 5 / 9 * 0.4, 1)
-        temp_note = (f"At {temp_f}°F, thermal derating is significant — panels lose ~{derate}% efficiency. "
-                     "AC demand across 12 homes will also be high; expect tight net production margins.")
-    elif temp_f > 77:
-        derate = round((temp_f - 77) * 5 / 9 * 0.35, 1)
-        temp_note = f"At {temp_f}°F there's minor derating (~{derate}%), but conditions remain productive."
-    elif temp_f >= 32:
-        temp_note = (f"At {temp_f}°F panels run cool — slightly better efficiency than the 77°F rating point. "
-                     "No thermal losses.")
+    # Report the same thermal loss the tool computed. temp_derate already uses
+    # the NOCT cell temperature estimate (air temperature plus sunlight and wind),
+    # so the text must not recompute loss from air temperature alone.
+    loss_pct = round((1 - temp_derate) * 100, 1)
+    if temp_f < 32:
+        temp_note = (f"At {temp_f}°F, check for ice or snow on panels. Snow cover can cut output to zero. "
+                     f"Estimated thermal loss is {loss_pct}%.")
+    elif loss_pct >= 10:
+        temp_note = (f"At {temp_f}°F, sunlight heats the cells well above the air, and the estimated thermal loss is {loss_pct}%.")
+        if temp_f > 90:
+            temp_note += " AC demand across 12 homes will also be high, so expect tight net production margins."
+    elif loss_pct > 0:
+        temp_note = (f"At {temp_f}°F, the estimated thermal loss is {loss_pct}%. Conditions remain productive.")
     else:
-        temp_note = (f"At {temp_f}°F, check for ice or snow on panels. Cold improves cell efficiency, "
-                     "but physical shading cuts output to zero.")
+        temp_note = (f"At {temp_f}°F, the estimated cell temperature stays at or below 25°C, so there is no thermal loss right now.")
 
     ex.append((SYS_,
         f"It's {temp_f}°F outside. How does temperature affect our solar output?",
         f"{temp_note} Current output: {prod_kw}kW. "
-        "Crystalline silicon loses ~0.35–0.45% per °C above 25°C (77°F)."
+        "Crystalline silicon loses about 0.4% per °C of cell temperature above 25°C, and cells in sun run well above the air temperature."
     ))
 
     # ── 4. Grid pricing strategy ────────────────────────────────────────────────

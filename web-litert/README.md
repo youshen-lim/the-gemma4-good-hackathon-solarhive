@@ -28,8 +28,8 @@ agentic loop on top.
    not fine-tune-dependent). Two on-device tools execute via the loop —
    `get_solar_production` (Open-Meteo realtime GHI, keyless, CORS-friendly)
    and `get_battery_state` (session simulator). Numerically aligned with
-   `solarhive_inference.py` Cell 4 (SYSTEM_EFF=0.85, Fahrenheit-based
-   temperature derating, identical return shapes including `temp_derate_pct`,
+   `solarhive_inference.py` Cell 4 (SYSTEM_EFF=0.85, NOCT cell temperature
+   derating from GHI, air temperature and 10 m wind, identical return shapes including `temp_derate_pct`,
    `kwh_stored`, `charging`).
 3. **Emoji parsing** — `parseEmojiResponse()` extracts the leading 1–2 emojis
    and renders them at 96px. The remaining imperative sentence sits underneath.

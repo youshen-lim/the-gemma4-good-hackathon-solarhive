@@ -737,7 +737,7 @@ LiteRT is purpose-built for on-device Gemma 4 inference where Cactus, Ollama, an
 
 #### Browser companion ([`web-litert/`](web-litert/))
 
-The browser code in [`web-litert/`](web-litert/) loads an upstream base E4B bundle and implements local solar and battery tools. No browser test results are published. The solar tool currently shares the Fahrenheit derating bug described in Known Limitations, so this README does not claim numerical equivalence with another runtime.
+The browser code in [`web-litert/`](web-litert/) loads an upstream base E4B bundle and implements local solar and battery tools. No browser test results are published. The solar tool uses the same NOCT cell temperature derating as the Python tools (`tempDerate` in `web-litert/app.js`). No browser results are published, so this README does not claim numerical equivalence with another runtime.
 
 **Citation.** Per the [LiteRT homepage](https://ai.google.dev/edge/litert), [LiteRT-LM repository](https://github.com/google-ai-edge/LiteRT-LM), and the April 2, 2026 Google Developers Blog:
 
@@ -956,7 +956,7 @@ data generation. These charts summarize the generated data. They do not validate
 | ![GHI Distribution](datagen_charts/chart_01.png) | ![Hourly Production](datagen_charts/chart_02.png) |
 | **Chart 1:** GHI distribution for Ann Arbor (median 265 W/m²) vs San Mateo (median 364 W/m²) — Michigan receives ~27% less solar irradiance | **Chart 2:** Average hourly production curve (mean ± 1 std). Peak at 1-2pm, Ann Arbor peaks higher but with wider variance |
 | ![Production Heatmap](datagen_charts/chart_03.png) | ![Temperature Derating](datagen_charts/chart_04.png) |
-| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor from the original data generation run. It is flat at 1.0 below 77°F, then declines 0.4% per °F. Panel temperature coefficients are stated per °C (PVWatts v8 defaults: 0.37% per °C for standard and 0.35% per °C for premium crystalline silicon), so that run applied the coefficient to the wrong unit. As of November 20, 2026, the code applies 0.4% per °C above 25°C. The code applies this coefficient to air temperature, while the 25°C reference is cell temperature, so it understates thermal loss in strong sun. This chart image predates that fix and needs regeneration (see Known Limitations). |
+| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor from the original data generation run. It is flat at 1.0 below 77°F, then declines 0.4% per °F. Panel temperature coefficients are stated per °C (PVWatts v8 defaults: 0.37% per °C for standard and 0.35% per °C for premium crystalline silicon), so that run applied the coefficient to the wrong unit. As of November 20, 2026, the code applies 0.4% per °C above 25°C. The code now applies this coefficient to a NOCT model cell temperature estimated from air temperature, GHI and wind. This chart image predates both changes and needs regeneration (see Known Limitations). |
 
 ### Environmental Correlations
 
@@ -1378,16 +1378,53 @@ that effect.
   hand-written tool examples in `solarhive_datagen.py` (lines 4320,
   4331, 4353, 4548, 4616 and 4632) still hold derating values from the
   old formula and need an update before the regeneration.
-- **The derating uses air temperature, not cell temperature.** This is
-  a simplification that the November 20, 2026 fix does not remove. The
-  25°C reference in panel temperature coefficients is cell temperature
-  ([SAM PVWatts help](https://samrepo.nlr.gov/help/pvwatts_system_design.html)).
-  In sun, cells run well above air temperature, and PVWatts estimates
-  cell temperature from irradiance, air temperature and wind. Because
-  the code feeds air temperature into the coefficient, it understates
-  thermal loss in sunny, hot conditions. A cell temperature model, or
-  the `tcell` output from PVWatts, would be needed before the rerun to
-  remove this gap.
+- **The derating now uses an estimated cell temperature.** The 25°C
+  reference in panel temperature coefficients is cell temperature
+  ([SAM PVWatts help](https://samrepo.nlr.gov/help/pvwatts_system_design.html);
+  [PVWatts V5 Manual](https://docs.nlr.gov/docs/fy14osti/62641.pdf),
+  Section 10). The original code fed air temperature into the
+  coefficient, so it understated thermal loss in sun. As of November 20,
+  2026, the code estimates cell temperature with the NOCT model and the
+  SAM wind term
+  ([SAM Photovoltaic Model Technical Reference Update](https://docs.nlr.gov/docs/fy18osti/67399.pdf),
+  Section 10.6, Equations 10.35 and 10.37;
+  [Sandia PVPMC NOCT page](https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/cell-temperature/noct-cell-temperature/)):
+  `T_cell = T_air + G / 800 * (NOCT - 20) * 9.5 / (5.7 + 3.8 * 0.51 * v10)`.
+  It then applies `max(0.75, 1.0 - 0.004 * max(0, T_cell - 25))`. The
+  helpers `NOCT_C`, `_wind_factor`, `_cell_temp_c` and `_temp_derate`
+  hold the model in `solarhive_datagen.py`, `solarhive_finetune.py`,
+  `solarhive_inference.py`, `solarhive_e4b_litert_v3.1.py`, the matching
+  notebooks and `web-litert/app.js`. The model has these inputs and
+  assumptions:
+  - NOCT is 49°C. The PVWatts V5 Manual (Section 9) gives this installed
+    NOCT for a roof mount with 4 inch standoffs. SolarHive models
+    rooftop arrays and requests the PVWatts fixed roof mount array type.
+    NOCT is rated at 800 W/m², 20°C air and 1 m/s wind
+    ([pvlib `noct_sam`](https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.noct_sam.html)).
+  - G is plane of array irradiance. The code uses GHI from Open-Meteo in
+    its place. GHI differs from the irradiance on a tilted array.
+  - v10 is the Open-Meteo 10 m wind speed in m/s. The 0.51 factor
+    adjusts it for an array one story or lower above ground. The data
+    generation reads hourly wind. The inference tools read current wind
+    from the same Open-Meteo request as GHI, so the
+    `get_solar_production(clouds_pct, temp_f)` signature does not change.
+  - When wind is unknown (the cloud cover fallback path and the archive
+    image rows), the wind factor is 1.0. That value equals the NOCT
+    rating wind of 1 m/s at module height. It overstates cell
+    temperature in typical daytime wind.
+  - When live GHI is missing, the cloud cover fallback uses the
+    irradiance that its own estimate implies,
+    `G = 1000 * efficiency * time_factor / SYSTEM_EFF`.
+  - The code omits the SAM factor `1 - eta_ref / tau_alpha`, so it gives
+    a higher cell temperature than SAM for the same inputs.
+  - The model is steady state and ignores thermal lag.
+  - The 0.75 floor comes from the original code, not from a source. It
+    binds only above a cell temperature of 87.5°C, which needs calm,
+    hot and clear conditions.
+
+  The published dataset, the fine-tuned models and all reported results
+  used air temperature. They need a dataset regeneration, a new fine
+  tune and a rerun.
 - **The NREL API host moved.** The original code called
   `developer.nrel.gov`. That host stopped serving requests on May 29,
   2026 and does not redirect. As of November 20, 2026, the code calls
@@ -1463,7 +1500,7 @@ The Special Technology Tracks recognize outstanding technical achievement using 
 
 ## Corrections (November 20, 2026)
 
-I corrected the following items on **November 20, 2026** after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data and models are unchanged. A later commit on November 20, 2026 fixed the two code issues in Known Limitations. The dataset, the models and the reported results still need regeneration and a rerun.
+I corrected the following items on **November 20, 2026** after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data and models are unchanged. Later commits on November 20, 2026 fixed the three code issues in Known Limitations. The dataset, the models and the reported results still need regeneration and a rerun.
 
 | Item | Previously stated | Corrected to | Cause |
 |---|---|---|---|
@@ -1481,7 +1518,8 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Compounding loss | About 34% | About 36% | Arithmetic: 0.70 × 0.60 × 0.95³ |
 | Derating chart | Validates the derating formula | The original code used 0.4% per °F, not per °C. The code now uses 0.4% per °C (see the derating formula row). The chart image predates the fix. | `solarhive_datagen.py` line 149 |
 | NREL host | developer.nrel.gov, unlimited | developer.nlr.gov. Old host retired May 29, 2026. The code now uses the new host (see the PVWatts endpoint row). | NLR domain transition notice |
-| Derating formula in code (November 20, 2026) | `max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))`, 0.4% per °F above 77°F | `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))` with `temp_c = (temp_f - 32) * 5 / 9`, 0.4% per °C above 25°C. The published dataset, the fine-tuned models and all reported results used the old formula and need regeneration and a rerun. | Panel temperature coefficients are stated per °C. The code still uses air temperature rather than cell temperature, so it understates thermal loss in sun (see Known Limitations). |
+| Derating formula in code (November 20, 2026) | `max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))`, 0.4% per °F above 77°F | `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))` with `temp_c = (temp_f - 32) * 5 / 9`, 0.4% per °C above 25°C. The published dataset, the fine-tuned models and all reported results used the old formula and need regeneration and a rerun. | Panel temperature coefficients are stated per °C. A later November 20, 2026 change applies the coefficient to an estimated cell temperature (see the cell temperature row). |
+| Cell temperature in code (November 20, 2026) | Derating applied to air temperature | Derating applied to an estimated cell temperature, `T_cell = T_air + G / 800 * (49 - 20) * 9.5 / (5.7 + 3.8 * 0.51 * v10)`, with GHI in place of plane of array irradiance and Open-Meteo 10 m wind. A wind factor of 1.0 applies when wind is unknown. The published dataset, the fine-tuned models and all reported results used air temperature and need regeneration and a rerun. | The 25°C coefficient reference is cell temperature (PVWatts V5 Manual, Sections 9 and 10; SAM Technical Reference Update, Section 10.6) |
 | PVWatts endpoint in code (November 20, 2026) | `https://developer.nrel.gov/api/pvwatts/v8.json` | `https://developer.nlr.gov/api/pvwatts/v8.json`. Existing API keys keep working. The published dataset and reported results came from runs against the old host and need a rerun. | [NLR domain transition notice](https://developer.nlr.gov/docs/nlr-domain-transition/) |
 | API free tiers | EIA and NREL "Unlimited" | Free key; see provider rate limits | EIA documents throttling |
 | Training rows | 551 training examples | 1,727 rows | Dataset and notebook 1 |
@@ -1516,7 +1554,7 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Cactus compatibility | The fine tune "drops in" via `cactus convert` | Converted to INT4. One prompt on one device. | No broader platform test |
 | Cactus notebook | "Validated"; the same notebook runs end to end on ARM | Conversion results only. ARM build and SDK test skipped. | The archived notebook ran on x86 |
 | On device latency | 99.88% of any chat round trip; tuning advice | One reported run. No cause or tuning effect is established. | Single run; no device log committed |
-| Browser tools | Numerically equivalent outputs to the cloud and hub | No equivalence claim. The solar tool shares the derating bug. | No browser test results; `web-litert/app.js` line 127 |
+| Browser tools | Numerically equivalent outputs to the cloud and hub | No equivalence claim. The solar tool uses the same NOCT derating as the Python tools. | No browser test results; `web-litert/app.js` lines 133 to 160 |
 | Chart captions | Charts validate data quality, the formula and the physics | Charts summarize the generated data | Charts do not test the formulas. Derating bug. |
 | Grid chart wording | CAISO grid "dramatically cleaner" | Neutral caption | Unsupported wording |
 | Project scope | Intelligence and optimization layer; operates at 12 to 200 homes | Learning prototype. Models 12 homes. | No equipment control; no real community test |

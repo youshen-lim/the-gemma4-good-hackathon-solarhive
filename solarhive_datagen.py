@@ -86,6 +86,57 @@ LOCATIONS = {
 
 SYSTEM_EFF = 0.85  # inverter * wiring * soiling * mismatch
 
+# Cell temperature model (November 20, 2026).
+# Panel temperature coefficients refer to CELL temperature, with Tref = 25°C
+# (PVWatts V5 Manual, Dobos 2014, NREL/TP-6A20-62641, Section 10, Eq. 8:
+# https://docs.nlr.gov/docs/fy14osti/62641.pdf). The derate therefore first
+# estimates cell temperature with the NOCT model and the SAM wind term
+# (SAM Photovoltaic Model Technical Reference Update, Gilman et al. 2018,
+# NREL/TP-6A20-67399, Section 10.6, Eqs. 10.35 and 10.37:
+# https://docs.nlr.gov/docs/fy18osti/67399.pdf; Sandia PVPMC NOCT page:
+# https://pvpmc.sandia.gov/modeling-guide/2-dc-module-iv/cell-temperature/noct-cell-temperature/):
+#     T_cell = T_air + G / 800 * (NOCT - 20) * 9.5 / (5.7 + 3.8 * v_adj)
+#     v_adj  = 0.51 * v10   (array one story or lower above ground)
+# NOCT is rated at 800 W/m², 20°C air and 1 m/s wind (pvlib noct_sam docs:
+# https://pvlib-python.readthedocs.io/en/stable/reference/generated/pvlib.temperature.noct_sam.html).
+# Inputs and assumptions:
+# - NOCT_C = 49°C is the installed NOCT for a roof mount with about 4 inch
+#   standoffs (PVWatts V5 Manual, Section 9), matching the rooftop arrays and
+#   PVWatts array_type=1 (fixed roof mount). It is used as T_noct,adj.
+# - G is plane of array irradiance. The code approximates it with GHI.
+# - v10 is wind speed in m/s at 10 m, the standard weather file height
+#   (Open-Meteo wind_speed_10m). The 0.51 factor assumes a one story array.
+# - When wind is unknown, the wind factor is 1.0, which is the NOCT rating
+#   wind of 1 m/s at module height (pvlib noct_sam default). This assumption
+#   overstates cell temperature in typical daytime wind.
+# - The SAM term (1 - eta_ref / tau_alpha) is omitted (set to 1), so the
+#   model gives a higher cell temperature than SAM for the same inputs.
+# - The 0.75 floor is a guard kept from the original code, not a cited
+#   value; it binds only above a cell temperature of 87.5°C.
+NOCT_C = 49.0
+WIND_HEIGHT_FACTOR = 0.51  # SAM Eq. 10.35, one story or lower
+
+
+def _wind_factor(wind_10m_ms=None):
+    """SAM NOCT wind factor 9.5 / (5.7 + 3.8 * 0.51 * v10); 1.0 if wind is unknown."""
+    if wind_10m_ms is None or wind_10m_ms != wind_10m_ms:  # None or NaN
+        return 1.0
+    v_adj = WIND_HEIGHT_FACTOR * max(0.0, wind_10m_ms)
+    return 9.5 / (5.7 + 3.8 * v_adj)
+
+
+def _cell_temp_c(temp_air_c, poa_wm2, wind_10m_ms=None, noct_c=NOCT_C):
+    """Estimated cell temperature (°C) from the NOCT model with the SAM wind term."""
+    return (temp_air_c
+            + max(0.0, poa_wm2) / 800.0 * (noct_c - 20.0) * _wind_factor(wind_10m_ms))
+
+
+def _temp_derate(temp_air_c, poa_wm2, wind_10m_ms=None, noct_c=NOCT_C):
+    """Derate factor: 0.4% per °C of cell temperature above 25°C, floor 0.75."""
+    t_cell = _cell_temp_c(temp_air_c, poa_wm2, wind_10m_ms, noct_c)
+    return max(0.75, 1.0 - 0.004 * max(0.0, t_cell - 25.0))
+
+
 # Mount Google Drive for export
 try:
     from google.colab import drive
@@ -145,10 +196,14 @@ df_meteo = pd.concat(_meteo_frames, ignore_index=True)
 # Derived columns
 df_meteo["temp_f"] = df_meteo["temperature_2m"] * 9 / 5 + 32
 df_meteo["wind_mph"] = df_meteo["windspeed_10m"] * 0.621371
-df_meteo["temp_derate"] = df_meteo["temp_f"].apply(
-    lambda t: max(0.75, 1.0 - 0.004 * max(0, (t - 32) * 5 / 9 - 25))
-)
 df_meteo["ghi"] = df_meteo["shortwave_radiation"].fillna(0).clip(0, 1400)
+# NOCT cell temperature from air temperature (°C) and GHI, with GHI standing
+# in for plane of array irradiance (see _cell_temp_c in the config cell)
+df_meteo["temp_derate"] = [
+    _temp_derate(t, g, w / 3.6)  # Open-Meteo windspeed_10m defaults to km/h
+    for t, g, w in zip(df_meteo["temperature_2m"], df_meteo["ghi"],
+                       df_meteo["windspeed_10m"])
+]
 df_meteo["prod_kw"] = (
     df_meteo["capacity_kw"] * (df_meteo["ghi"] / 1000) * SYSTEM_EFF * df_meteo["temp_derate"]
 )
@@ -883,15 +938,17 @@ print("  Chart 3: Seasonal production heatmap")
 # ── Chart 4: Temperature Derating Curve ──────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, _FIG_H))
 _temps = np.linspace(50, 120, 100)
-_derates = [max(0.75, 1.0 - 0.004 * max(0, (t - 32) * 5 / 9 - 25)) for t in _temps]
-ax.plot(_temps, _derates, color="crimson", linewidth=2.5)
-ax.axvline(77, color="gray", ls=":", label="Reference temp (77°F = 25°C)")
+for _g, _color in [(0, "gray"), (500, "orange"), (1000, "crimson")]:
+    _derates = [_temp_derate((t - 32) * 5 / 9, _g) for t in _temps]
+    ax.plot(_temps, _derates, color=_color, linewidth=2.5,
+            label=f"NOCT model, GHI = {_g} W/m², NOCT rating wind")
+ax.axvline(77, color="gray", ls=":", label="Reference cell temp (77°F = 25°C)")
 ax.axhline(1.0, color="gray", ls=":", alpha=0.5)
 # Scatter actual data (sample)
 _sample = df_meteo[df_meteo["ghi"] > 100].sample(n=min(500, len(df_meteo)), random_state=42)
 ax.scatter(_sample["temp_f"], _sample["temp_derate"], alpha=0.3, s=10, color="steelblue", label="Actual data")
-ax.set_title("Temperature Derating Factor vs Temperature")
-ax.set_xlabel("Temperature (°F)")
+ax.set_title("Temperature Derating Factor vs Air Temperature (NOCT cell model)")
+ax.set_xlabel("Air Temperature (°F)")
 ax.set_ylabel("Derating Factor")
 ax.legend()
 plt.tight_layout()
@@ -1995,8 +2052,12 @@ if len(df_owm) > 0:
         ]:
             _loc_info = LOCATIONS[loc]
             cap = _loc_info["capacity_kw"]
-            derate = max(0.75, 1.0 - 0.004 * max(0, (row["temp_f"] - 32) * 5 / 9 - 25))
             cloud_factor = 1.0 - row["clouds_pct"] / 100 * 0.75
+            # OWM rows have no GHI. For the NOCT model, use the irradiance this
+            # estimate implies: G = 1000 * cloud_factor * 0.5 / SYSTEM_EFF.
+            derate = _temp_derate((row["temp_f"] - 32) * 5 / 9,
+                                  1000 * cloud_factor * 0.5 / SYSTEM_EFF,
+                                  row["wind_mph"] * 0.44704)  # OWM imperial: mph
             est_prod = cap * cloud_factor * derate * 0.5  # rough midday estimate
             _wx_verdict = ('Excellent conditions for solar.' if row['clouds_pct'] < 25
                            else 'Cloud cover is limiting output — expect variable production.' if row['clouds_pct'] < 70
@@ -5377,13 +5438,15 @@ def _solar_production(ghi_wm2: float, temp_f: float = 77.0,
 
         prod_kw = capacity_kw * (ghi/1000) * SYSTEM_EFF * temp_derate
         temp_c = (temp_f - 32) * 5 / 9
-        temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
+        temp_derate = _temp_derate(temp_c, ghi_wm2)
 
-    Default temp_f=77°F gives derate=1.0 (no thermal loss). Higher temps
-    apply thermal derating; the worst-case derate is capped at 0.75.
+    _temp_derate applies 0.4% loss per °C of NOCT cell temperature above
+    25°C. Archive images carry no wind, so the NOCT rating wind applies
+    (wind factor 1.0). In sun the cells run above air temperature, so 77°F
+    air still derates. The worst-case derate is capped at 0.75.
     """
     temp_c = (temp_f - 32) * 5 / 9
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
+    temp_derate = _temp_derate(temp_c, ghi_wm2)
     return capacity_kw * (ghi_wm2 / 1000) * SYSTEM_EFF * temp_derate
 
 
