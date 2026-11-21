@@ -448,8 +448,9 @@ def get_solar_production(clouds_pct: int = 30, temp_f: float = 77.0) -> dict:
     # System losses: inverter 97% × wiring 98% × soiling 97% × mismatch 98% ≈ 0.85
     SYSTEM_EFF = 0.85
 
-    # Temperature derating: silicon panels lose ~0.4%/°F above 77°F (25°C)
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+    # Temperature derating: silicon panels lose ~0.4% per °C above 25°C (77°F)
+    temp_c = (temp_f - 32) * 5 / 9
+    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
 
     ghi = _get_current_ghi()
     if ghi is not None:
@@ -599,7 +600,7 @@ def _fetch_nrel_pvwatts():
         return _NREL_PVWATTS_CACHE
     try:
         r = requests.get(
-            "https://developer.nrel.gov/api/pvwatts/v8.json",
+            "https://developer.nlr.gov/api/pvwatts/v8.json",
             params={
                 "api_key": NREL_API_KEY,
                 "system_capacity": COMMUNITY_CAPACITY_KW,  # 72 kW total

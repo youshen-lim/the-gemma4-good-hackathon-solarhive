@@ -112,7 +112,8 @@ const BATTERY = {
 async function tool_get_solar_production() {
   // Mirrors solarhive_inference.py get_solar_production():
   //   SYSTEM_EFF = 0.85  # inverter 97% × wiring 98% × soiling 97% × mismatch 98%
-  //   temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+  //   temp_c = (temp_f - 32) * 5 / 9
+  //   temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
   //   production = max(0, COMMUNITY_CAPACITY_KW * (ghi / 1000) * SYSTEM_EFF * temp_derate)
   const COMMUNITY_CAPACITY_KW = 72;
   const SYSTEM_EFF = 0.85;
@@ -124,7 +125,7 @@ async function tool_get_solar_production() {
     const ghi = Number(data?.current?.shortwave_radiation ?? 0);
     const temp_c = Number(data?.current?.temperature_2m ?? 20);
     const temp_f = (temp_c * 9 / 5) + 32;
-    const temp_derate = Math.max(0.75, 1.0 - 0.004 * Math.max(0, temp_f - 77));
+    const temp_derate = Math.max(0.75, 1.0 - 0.004 * Math.max(0, temp_c - 25));
     const production_kw = Math.max(
       0,
       Math.round(COMMUNITY_CAPACITY_KW * (ghi / 1000) * SYSTEM_EFF * temp_derate * 10) / 10,

@@ -146,7 +146,7 @@ df_meteo = pd.concat(_meteo_frames, ignore_index=True)
 df_meteo["temp_f"] = df_meteo["temperature_2m"] * 9 / 5 + 32
 df_meteo["wind_mph"] = df_meteo["windspeed_10m"] * 0.621371
 df_meteo["temp_derate"] = df_meteo["temp_f"].apply(
-    lambda t: max(0.75, 1.0 - 0.004 * max(0, t - 77))
+    lambda t: max(0.75, 1.0 - 0.004 * max(0, (t - 32) * 5 / 9 - 25))
 )
 df_meteo["ghi"] = df_meteo["shortwave_radiation"].fillna(0).clip(0, 1400)
 df_meteo["prod_kw"] = (
@@ -182,7 +182,7 @@ print("✅ Cell 2 complete — Open-Meteo historical loaded")
 
 def fetch_pvwatts(lat, lon, capacity_kw, tilt, azimuth, losses, api_key):
     """Fetch PVWatts v8 monthly + hourly data from NREL."""
-    url = "https://developer.nrel.gov/api/pvwatts/v8.json"
+    url = "https://developer.nlr.gov/api/pvwatts/v8.json"
     params = {
         "api_key": api_key,
         "lat": lat,
@@ -883,9 +883,9 @@ print("  Chart 3: Seasonal production heatmap")
 # ── Chart 4: Temperature Derating Curve ──────────────────────────────────────
 fig, ax = plt.subplots(figsize=(10, _FIG_H))
 _temps = np.linspace(50, 120, 100)
-_derates = [max(0.75, 1.0 - 0.004 * max(0, t - 77)) for t in _temps]
+_derates = [max(0.75, 1.0 - 0.004 * max(0, (t - 32) * 5 / 9 - 25)) for t in _temps]
 ax.plot(_temps, _derates, color="crimson", linewidth=2.5)
-ax.axvline(77, color="gray", ls=":", label="Reference temp (77°F)")
+ax.axvline(77, color="gray", ls=":", label="Reference temp (77°F = 25°C)")
 ax.axhline(1.0, color="gray", ls=":", alpha=0.5)
 # Scatter actual data (sample)
 _sample = df_meteo[df_meteo["ghi"] > 100].sample(n=min(500, len(df_meteo)), random_state=42)
@@ -1497,12 +1497,12 @@ for i, (_, row) in enumerate(_hot.iterrows()):
         (f"High temperature alert in {row['location']}. At {row['temp_f']:.0f}°F, panels lose "
          f"approximately {loss_pct:.1f}% efficiency due to thermal derating (factor: {derate:.3f}). "
          f"Current production is {prod:.1f} kW vs theoretical {_theoretical:.1f} kW "
-         f"at 77°F. This is normal — silicon panels lose ~0.4% efficiency per degree above 77°F. "
+         f"at 77°F. This is normal — silicon panels lose ~0.4% efficiency per °C above 25°C (77°F). "
          f"Production will recover as temperatures cool in late afternoon."),
         (f"Thermal derating active in {row['location']}: {row['temp_f']:.0f}°F means a "
          f"{loss_pct:.1f}% efficiency loss (derating factor {derate:.3f}). Output is {prod:.1f} kW — "
          f"at the reference temperature of 77°F, we'd be hitting {_theoretical:.1f} kW. "
-         f"Silicon panels shed ~0.4%/°F above 77°F. Expect improvement toward evening as temps drop."),
+         f"Silicon panels shed ~0.4% per °C above 25°C (77°F). Expect improvement toward evening as temps drop."),
         (f"At {row['temp_f']:.0f}°F in {row['location']}, thermal derating cuts output by {loss_pct:.1f}%. "
          f"Producing {prod:.1f} kW instead of the {_theoretical:.1f} kW potential at 77°F. "
          f"Derating factor: {derate:.3f}. Wind helps cool panels slightly. "
@@ -1995,7 +1995,7 @@ if len(df_owm) > 0:
         ]:
             _loc_info = LOCATIONS[loc]
             cap = _loc_info["capacity_kw"]
-            derate = max(0.75, 1.0 - 0.004 * max(0, row["temp_f"] - 77))
+            derate = max(0.75, 1.0 - 0.004 * max(0, (row["temp_f"] - 32) * 5 / 9 - 25))
             cloud_factor = 1.0 - row["clouds_pct"] / 100 * 0.75
             est_prod = cap * cloud_factor * derate * 0.5  # rough midday estimate
             _wx_verdict = ('Excellent conditions for solar.' if row['clouds_pct'] < 25
@@ -2847,7 +2847,7 @@ _g6_pairs = [
      "CAISO (California) averages 65-70% renewable with strong solar penetration. "
      "Our Ann Arbor panels displace more CO2 per kWh because MISO's grid is dirtier."),
     ("What temperature causes the most panel efficiency loss?",
-     "Silicon panels lose ~0.4% efficiency per °F above 77°F. At 100°F, that's about 9% loss. "
+     "Silicon panels lose ~0.4% efficiency per °C above 25°C (77°F). At 100°F (about 38°C), that's about 5% loss. "
      "Below 77°F, panels actually gain efficiency. Michigan winters can boost output slightly, "
      "but lower sun angles and shorter days more than offset the thermal advantage."),
     ("How many homes does our community solar system serve?",
@@ -2901,7 +2901,7 @@ LEGACY_DATA = [
      "Heavy stratus drops production to 15-25% of capacity — only 11-18kW from 72kW. Stratus persists, so this isn't temporary. Postpone EV charging and pool heating, rely on battery for essentials, and draw from grid during off-peak if battery drops below 30%."),
 
     (SYS_TOOLS, "Clear blue sky, 85°F. Are we at peak production?",
-     "Clear skies are ideal for irradiance, but at 85°F panels lose ~2-4% from thermal effects (0.3-0.5% per degree above 77°F). You're generating roughly 58-60kW of 72kW capacity. Still excellent — charge the battery to full and run high-consumption appliances now while energy is free."),
+     "Clear skies are ideal for irradiance, but at 85°F (about 29°C) panels lose ~1-2% from thermal effects (0.3-0.5% per °C above 25°C). You're generating roughly 58-60kW of 72kW capacity. Still excellent — charge the battery to full and run high-consumption appliances now while energy is free."),
 
     (SYS_TOOLS, "Thin cirrus clouds moving in from the west. Wind picking up.",
      "Cirrus clouds are thin and high-altitude — they typically reduce production by only 5-10%. However, cirrus often precedes a weather front. Check the forecast: if thicker clouds follow in 3-6 hours, prioritize charging the battery now while production is still strong. Wind itself doesn't affect panels directly but confirms a front is approaching."),
@@ -2916,7 +2916,7 @@ LEGACY_DATA = [
      "Heavy wildfire smoke (AQI 185) acts like dense cloud cover — fine particles scatter and absorb direct sunlight, reducing production by 40-60%. You're likely seeing 29-43kW instead of a normal 60+ kW clear day. The silver lining: diffuse light still reaches panels, so production isn't zero. Monitor generation hourly. When AQI drops below 100, expect a meaningful recovery. No hardware action needed — smoke is temporary and doesn't damage panels."),
 
     (SYS_TOOLS, "It's a summer heat wave. 98°F and clear skies. Should we be concerned?",
-     "Clear skies mean strong irradiance, but 98°F causes significant thermal derating — panels lose ~0.4-0.5% efficiency per degree above 77°F, so at 98°F that's roughly 8-10% loss. You're producing maybe 53-55kW instead of 60kW. More importantly, 98°F means AC units across all 12 homes are running hard. Expect community consumption of 35-50kW. Net production may only cover 5-20kW of surplus. Charge the battery now while sun is overhead and avoid large discretionary loads like EVs until after 7pm off-peak."),
+     "Clear skies mean strong irradiance, but 98°F causes significant thermal derating — panels lose ~0.4-0.5% efficiency per °C above 25°C (77°F), so at 98°F (about 37°C) that's roughly 5-6% loss. You're producing maybe 56-57kW instead of 60kW. More importantly, 98°F means AC units across all 12 homes are running hard. Expect community consumption of 35-50kW. Net production may only cover 5-20kW of surplus. Charge the battery now while sun is overhead and avoid large discretionary loads like EVs until after 7pm off-peak."),
 
     (SYS_TOOLS, "December 21st, shortest day of the year, clear sky. What's our production window?",
      "On the winter solstice in Ann Arbor (42°N), the sun rises around 8:05am and sets at 5:04pm — a 9-hour window, but effective production only runs from about 9am to 3:30pm (6.5 hours vs 10 hours in summer). Combined with a low sun angle reducing irradiance by ~35%, peak production today is roughly 38-44kW at noon instead of 60+kW in summer. Maximize that 9am-3pm window: run your biggest loads then, not in the evening."),
@@ -3326,7 +3326,7 @@ LEGACY_DATA = [
      "Fire ants are a real threat to electrical equipment. They're attracted to electrical fields and will colonize junction boxes, inverter enclosures, and conduit connections. Inside equipment, ant bodies bridge contacts causing short circuits, and their formic acid corrodes copper connections. Immediate action: (1) Apply granular fire ant bait (not liquid spray — liquid near electrical equipment is a shock hazard) in a 3-foot perimeter around the array base. (2) Inspect all ground-level junction boxes and combiner boxes for ant intrusion. If found: de-energize the system, carefully vacuum ants from equipment, apply dielectric grease to all connections, and seal entry points with silicone. (3) Install ant-deterrent granules quarterly during warm months (March-November in Texas). Cost: $20-40/year. Prevention is far cheaper than the $500-1,500 repair bill for an ant-damaged combiner box or inverter."),
 
     (SYS_TOOLS, "Community in Minnesota. -20°F cold snap. Do solar panels work in extreme cold?",
-     "Panels love cold — electrical efficiency increases 0.3-0.5% per degree below 77°F. At -20°F, that's a 15-19% efficiency BONUS over rated specs. Your panels are generating more watts per lumen of light than in summer. However: (1) Extreme cold makes wiring brittle — don't touch, move, or adjust connections in -20°F weather. (2) Rapid temperature swings (common in Minnesota — sunny morning going from -20° to 10°F quickly) create thermal stress that can propagate micro-cracks over years. (3) Snow is the real enemy, not cold — if panels are clear, production per sun-hour is excellent even at -20°F. (4) Inverter enclosures may need heating elements below -13°F (most inverters are rated to -13°F). Check your inverter's specs. (5) Battery performance drops significantly in extreme cold — if batteries aren't in a heated enclosure, usable capacity may drop 20-30% at -20°F. Cold panels good, cold batteries bad."),
+     "Panels love cold — electrical efficiency increases 0.3-0.5% per °C below 25°C (77°F). At -20°F (about -29°C), that's a 16-27% efficiency BONUS over rated specs. Your panels are generating more watts per lumen of light than in summer. However: (1) Extreme cold makes wiring brittle — don't touch, move, or adjust connections in -20°F weather. (2) Rapid temperature swings (common in Minnesota — sunny morning going from -20° to 10°F quickly) create thermal stress that can propagate micro-cracks over years. (3) Snow is the real enemy, not cold — if panels are clear, production per sun-hour is excellent even at -20°F. (4) Inverter enclosures may need heating elements below -13°F (most inverters are rated to -13°F). Check your inverter's specs. (5) Battery performance drops significantly in extreme cold — if batteries aren't in a heated enclosure, usable capacity may drop 20-30% at -20°F. Cold panels good, cold batteries bad."),
 
     (SYS_TOOLS, "Panel inspection reveals yellowing (browning) on 4 panels out of 20. They're 8 years old. What is this?",
      "Yellowing/browning of the encapsulant (the clear material between glass and cells) is called EVA browning — it's UV-induced degradation of the ethylene-vinyl acetate encapsulant. At 8 years, this is premature — quality panels shouldn't show visible browning until year 15-20. Causes: lower-grade EVA (common in budget panels from 2015-2018), or inadequate UV stabilizers. Impact: yellowed panels lose 5-15% of light transmission, reducing output proportionally. At 4/20 panels: if all 4 are from the same batch, it's a manufacturing defect — check your 25-year performance warranty. Most manufacturers warrant 80% output at year 25; if browning has caused output to drop below the warranty curve, file a claim. Document with dated photos showing the discoloration progression. These panels will continue degrading — replacement may be warranted within 2-3 years if the browning accelerates."),
@@ -3702,7 +3702,7 @@ LEGACY_DATA = [
     # Geographically diverse — not locked to one location.
 
     (SYS_TOOLS, "Phoenix community (20 homes, 120kW array, 200kWh battery). It's 3pm, 112°F, battery at 35%, peak pricing at $0.35/kWh. All homes running AC. Strategy?",
-     "Critical situation — high consumption meets low battery. At 112°F, AC across 20 homes draws 60-80kW continuously. Panel thermal derating at 112°F is severe: roughly 14% loss, so your 120kW array produces maybe 85-95kW at this hour. Net surplus is thin or negative. Priority: do NOT import from grid at $0.35/kWh unless battery drops below 20%. Raise community thermostats 2°F (saves ~10kW total). Defer all non-AC loads — no pool pumps, no EV charging, no laundry. At 35% SOC (70kWh), you have about 1-1.5 hours of buffer if production dips. By 5pm sun angle drops and production falls — prepare for grid import at that point. Pre-cool homes aggressively before 6pm while solar is still generating."),
+     "Critical situation — high consumption meets low battery. At 112°F, AC across 20 homes draws 60-80kW continuously. Panel thermal derating at 112°F (about 44°C) is significant: roughly 8% loss, so your 120kW array produces maybe 85-95kW at this hour. Net surplus is thin or negative. Priority: do NOT import from grid at $0.35/kWh unless battery drops below 20%. Raise community thermostats 2°F (saves ~10kW total). Defer all non-AC loads — no pool pumps, no EV charging, no laundry. At 35% SOC (70kWh), you have about 1-1.5 hours of buffer if production dips. By 5pm sun angle drops and production falls — prepare for grid import at that point. Pre-cool homes aggressively before 6pm while solar is still generating."),
 
     (SYS_TOOLS, "Seattle suburb (8 homes, 48kW panels, 80kWh battery). Overcast for 5 days straight, battery at 62%. Three EVs need charging by Friday. How do we manage?",
      "Pacific Northwest overcast means 10-20% production — roughly 5-10kW from your 48kW array. Over 5 days that's only 40-80kWh total generation vs community consumption of 150-200kWh. You'll need grid supplementation. EV strategy: charge one EV per night during off-peak (typically 11pm-7am) at the lowest rate. Three EVs at ~40kWh each = 120kWh total — spread across 5 nights that's 24kWh/night, about 3-4 hours per EV at Level 2. Keep battery above 30% as emergency reserve. Don't try to charge EVs from solar during overcast — the 5-10kW won't cover a single Level 2 charger (7.2kW) while also serving household loads. Grid off-peak is your friend this week."),
@@ -3744,7 +3744,7 @@ LEGACY_DATA = [
      "You're in a paradox — incredible solar potential (high altitude + cold = peak cell efficiency) but snow blocks it all. Priorities: (1) Clear snow from as many panels as safely accessible. At -12°F, use soft foam squeegees only — no hot water (thermal shock cracks glass). Even clearing 30-40% of panels would give you 20-30kW of very efficient cold-weather production. (2) With grid flickering, treat battery as emergency reserve. At 33% (39.6kWh), you have 4-6 hours of essential loads for 12 homes. Don't drain it further. (3) If you can clear panels and get production going, route ALL solar to battery first — no discretionary loads until battery exceeds 50%. (4) Have a backup heating plan — if grid and battery both fail at -12°F, that's a life safety situation. Identify homes with gas/propane backup heating. Snow clearing is your highest-ROI action right now."),
 
     (SYS_TOOLS, "Suburban Chicago community (18 homes, 108kW array, 180kWh battery). July heat dome: 102°F, high humidity, grid under stress. Our production is lower than expected. Why, and what do we do?",
-     "Two factors are suppressing production. First, thermal derating: at 102°F, panels lose ~10-12% efficiency (0.4% per °F above 77°F × 25°F = 10%). Your 108kW array is producing roughly 85-95kW instead of 100+kW. Second, high humidity creates aerosol haze that scatters direct sunlight — another 10-15% loss on humid days. Combined: 75-85kW actual production vs 100+ expected. With 18 homes all running AC (3-5kW each = 54-90kW total), your net surplus is thin. Strategy: community-wide thermostat increase of 2°F saves 8-15kW total. Defer all non-cooling loads. Battery at whatever SOC it's at — preserve it for the 4-8pm peak when production drops but AC demand stays high. If the grid issues a conservation alert, you're positioned to island and earn demand response credits."),
+     "Two factors are suppressing production. First, thermal derating: at 102°F, panels lose ~5-6% efficiency (0.4% per °C above 25°C × about 14°C = 5.6%). Your 108kW array is producing roughly 90-95kW instead of 100+kW. Second, high humidity creates aerosol haze that scatters direct sunlight — another 10-15% loss on humid days. Combined: 80-85kW actual production vs 100+ expected. With 18 homes all running AC (3-5kW each = 54-90kW total), your net surplus is thin. Strategy: community-wide thermostat increase of 2°F saves 8-15kW total. Defer all non-cooling loads. Battery at whatever SOC it's at — preserve it for the 4-8pm peak when production drops but AC demand stays high. If the grid issues a conservation alert, you're positioned to island and earn demand response credits."),
 
     (SYS_TOOLS, "Our 50-home planned community in Nevada wants to design a solar+battery system. Average summer production goal: 90% self-sufficiency. What sizing do we need?",
      "For 50 homes in Nevada at 90% self-sufficiency, here's the sizing calculation. Average Nevada home: 30-40kWh/day consumption (high AC). 50 homes × 35kWh = 1,750kWh/day total. At 90% self-sufficiency: 1,575kWh/day from solar. Nevada gets 6-7 peak sun hours. Required array: 1,575 ÷ 6.5 ÷ 0.85 (system efficiency) = ~285kW of panels. Battery sizing: overnight loads (10pm-7am) = ~600-700kWh for 50 homes. Plus a 2-hour afternoon buffer for clouds = ~200kWh. Total battery: 800-900kWh. Round numbers: **300kW panels + 900kWh battery** for your 50-home Nevada community at 90% self-sufficiency. This is a substantial system but typical for planned solar communities. Summer will exceed 90% easily; winter drops to 70-75% due to shorter days. Annual average should hit the 90% target."),
@@ -4195,7 +4195,7 @@ LEGACY_TOOL_CALL_DATA = [
             {"function": {"name": "get_weather", "arguments": {"location": "Phoenix, AZ"}}}
         ]},
         {"role": "tool", "name": "get_weather", "content": '{"temperature_f": 108, "clouds_pct": 5, "description": "clear sky", "wind_mph": 4.1, "humidity_pct": 12, "sunrise": "05:30", "sunset": "19:15"}'},
-        {"role": "assistant", "content": "Phoenix is at 108°F with clear skies. At this temperature, panels lose about 12.4% efficiency from thermal derating (0.4% per degree above 77°F). You're still generating strong output thanks to the clear skies and intense Arizona sun, but expect roughly 88% of rated capacity. The low humidity (12%) is actually ideal — no aerosol haze reducing irradiance. Run heavy loads now while irradiance is peak."},
+        {"role": "assistant", "content": "Phoenix is at 108°F with clear skies. At this temperature, panels lose about 6.9% efficiency from thermal derating (0.4% per °C above 25°C, and 108°F is about 42°C). You're still generating strong output thanks to the clear skies and intense Arizona sun, but expect roughly 93% of rated capacity. The low humidity (12%) is actually ideal — no aerosol haze reducing irradiance. Run heavy loads now while irradiance is peak."},
     ],
 
     # 3. Storm check — Miami
@@ -5376,12 +5376,14 @@ def _solar_production(ghi_wm2: float, temp_f: float = 77.0,
     """Solar production estimate.
 
         prod_kw = capacity_kw * (ghi/1000) * SYSTEM_EFF * temp_derate
-        temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+        temp_c = (temp_f - 32) * 5 / 9
+        temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
 
     Default temp_f=77°F gives derate=1.0 (no thermal loss). Higher temps
     apply thermal derating; the worst-case derate is capped at 0.75.
     """
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+    temp_c = (temp_f - 32) * 5 / 9
+    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
     return capacity_kw * (ghi_wm2 / 1000) * SYSTEM_EFF * temp_derate
 
 

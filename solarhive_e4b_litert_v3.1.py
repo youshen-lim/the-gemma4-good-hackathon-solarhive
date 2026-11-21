@@ -369,7 +369,7 @@ else:
 """## 5: SolarHive tool definitions (5 tools, byte-equivalent to inference.py)
 
 Ported verbatim from `solarhive_inference.py` Cell 4. All numeric constants
-match (SYSTEM_EFF=0.85, Fahrenheit-77 derating threshold, NREL PVWatts v8
+match (SYSTEM_EFF=0.85, 25°C (77°F) derating threshold, NREL PVWatts v8
 defaults). The agentic loop in Cell 6 dispatches tool calls through `TOOL_MAP`
 exactly the way the cloud and Ollama runtimes do.
 
@@ -437,7 +437,8 @@ def get_solar_production(clouds_pct: int = 30, temp_f: float = 77.0) -> dict:
     """
     clouds_pct = max(0, min(100, int(clouds_pct)))
     temp_f = max(-40, min(130, float(temp_f)))
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+    temp_c = (temp_f - 32) * 5 / 9
+    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
 
     ghi = _get_current_ghi()
     if ghi is not None:
@@ -568,7 +569,7 @@ def _fetch_nrel_pvwatts():
         return _NREL_PVWATTS_CACHE
     try:
         r = requests.get(
-            "https://developer.nrel.gov/api/pvwatts/v8.json",
+            "https://developer.nlr.gov/api/pvwatts/v8.json",
             params={"api_key": NREL_API_KEY, "system_capacity": COMMUNITY_CAPACITY_KW,
                     "module_type": 0, "losses": 14, "array_type": 1,
                     "tilt": 30, "azimuth": 180, "lat": LAT, "lon": LON},
