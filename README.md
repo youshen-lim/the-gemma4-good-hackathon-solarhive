@@ -956,7 +956,7 @@ data generation. These charts summarize the generated data. They do not validate
 | ![GHI Distribution](datagen_charts/chart_01.png) | ![Hourly Production](datagen_charts/chart_02.png) |
 | **Chart 1:** GHI distribution for Ann Arbor (median 265 W/m²) vs San Mateo (median 364 W/m²) — Michigan receives ~27% less solar irradiance | **Chart 2:** Average hourly production curve (mean ± 1 std). Peak at 1-2pm, Ann Arbor peaks higher but with wider variance |
 | ![Production Heatmap](datagen_charts/chart_03.png) | ![Temperature Derating](datagen_charts/chart_04.png) |
-| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor from the original data generation run. It is flat at 1.0 below 77°F, then declines 0.4% per °F. The physical coefficient is about 0.4% to 0.5% per °C, so that run overstated thermal loss. As of November 20, 2026, the code applies 0.4% per °C above 25°C. This chart image predates that fix and needs regeneration (see Known Limitations). |
+| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor from the original data generation run. It is flat at 1.0 below 77°F, then declines 0.4% per °F. Panel temperature coefficients are stated per °C (PVWatts v8 defaults: 0.37% per °C for standard and 0.35% per °C for premium crystalline silicon), so that run applied the coefficient to the wrong unit. As of November 20, 2026, the code applies 0.4% per °C above 25°C. The code applies this coefficient to air temperature, while the 25°C reference is cell temperature, so it understates thermal loss in strong sun. This chart image predates that fix and needs regeneration (see Known Limitations). |
 
 ### Environmental Correlations
 
@@ -1362,9 +1362,11 @@ that effect.
 **Known issues fixed in code that still need a rerun**
 
 - **Temperature derating used the wrong unit.** The original code
-  applied 0.4% loss per °F above 77°F. The physical coefficient is
-  about 0.4% to 0.5% per °C, so the original code overstated thermal
-  loss. As of November 20, 2026, the code converts the temperature to
+  applied 0.4% loss per °F above 77°F. Panel temperature coefficients
+  are stated per °C (PVWatts v8 defaults: 0.37% per °C for standard and
+  0.35% per °C for premium crystalline silicon), so the original code
+  made each degree of excess heat cost 1.8 times what a per °C
+  coefficient gives. As of November 20, 2026, the code converts the temperature to
   Celsius and applies 0.4% loss per °C above 25°C (77°F), with the same
   0.75 floor: `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))`. The fix
   covers `solarhive_datagen.py`, `solarhive_finetune.py`,
@@ -1376,6 +1378,16 @@ that effect.
   hand-written tool examples in `solarhive_datagen.py` (lines 4320,
   4331, 4353, 4548, 4616 and 4632) still hold derating values from the
   old formula and need an update before the regeneration.
+- **The derating uses air temperature, not cell temperature.** This is
+  a simplification that the November 20, 2026 fix does not remove. The
+  25°C reference in panel temperature coefficients is cell temperature
+  ([SAM PVWatts help](https://samrepo.nlr.gov/help/pvwatts_system_design.html)).
+  In sun, cells run well above air temperature, and PVWatts estimates
+  cell temperature from irradiance, air temperature and wind. Because
+  the code feeds air temperature into the coefficient, it understates
+  thermal loss in sunny, hot conditions. A cell temperature model, or
+  the `tcell` output from PVWatts, would be needed before the rerun to
+  remove this gap.
 - **The NREL API host moved.** The original code called
   `developer.nrel.gov`. That host stopped serving requests on May 29,
   2026 and does not redirect. As of November 20, 2026, the code calls
@@ -1469,7 +1481,7 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Compounding loss | About 34% | About 36% | Arithmetic: 0.70 × 0.60 × 0.95³ |
 | Derating chart | Validates the derating formula | The original code used 0.4% per °F, not per °C. The code now uses 0.4% per °C (see the derating formula row). The chart image predates the fix. | `solarhive_datagen.py` line 149 |
 | NREL host | developer.nrel.gov, unlimited | developer.nlr.gov. Old host retired May 29, 2026. The code now uses the new host (see the PVWatts endpoint row). | NLR domain transition notice |
-| Derating formula in code (November 20, 2026) | `max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))`, 0.4% per °F above 77°F | `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))` with `temp_c = (temp_f - 32) * 5 / 9`, 0.4% per °C above 25°C. The published dataset, the fine-tuned models and all reported results used the old formula and need regeneration and a rerun. | Panel temperature coefficients are stated per °C |
+| Derating formula in code (November 20, 2026) | `max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))`, 0.4% per °F above 77°F | `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))` with `temp_c = (temp_f - 32) * 5 / 9`, 0.4% per °C above 25°C. The published dataset, the fine-tuned models and all reported results used the old formula and need regeneration and a rerun. | Panel temperature coefficients are stated per °C. The code still uses air temperature rather than cell temperature, so it understates thermal loss in sun (see Known Limitations). |
 | PVWatts endpoint in code (November 20, 2026) | `https://developer.nrel.gov/api/pvwatts/v8.json` | `https://developer.nlr.gov/api/pvwatts/v8.json`. Existing API keys keep working. The published dataset and reported results came from runs against the old host and need a rerun. | [NLR domain transition notice](https://developer.nlr.gov/docs/nlr-domain-transition/) |
 | API free tiers | EIA and NREL "Unlimited" | Free key; see provider rate limits | EIA documents throttling |
 | Training rows | 551 training examples | 1,727 rows | Dataset and notebook 1 |
