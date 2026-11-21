@@ -491,8 +491,9 @@ def _fetch_api_examples():
     month   = now.month
     # Time factor (sun angle proxy) — always computed for training text descriptions
     tf = max(0.0, 1.0 - ((hour - 12) / 6) ** 2) if 6 <= hour <= 18 else 0.0
-    # Temperature derating: silicon panels lose ~0.4%/°F above 77°F (25°C)
-    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))
+    # Temperature derating: silicon panels lose ~0.4% per °C above 25°C (77°F)
+    temp_c = (temp_f - 32) * 5 / 9
+    temp_derate = max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))
 
     if ghi is not None:
         # GHI-based: satellite-measured irradiance (same formula as inference.py)
@@ -557,11 +558,11 @@ def _fetch_api_examples():
 
     # ── 3. Temperature impact ───────────────────────────────────────────────────
     if temp_f > 90:
-        derate = round((temp_f - 77) * 0.4, 1)
+        derate = round((temp_f - 77) * 5 / 9 * 0.4, 1)
         temp_note = (f"At {temp_f}°F, thermal derating is significant — panels lose ~{derate}% efficiency. "
                      "AC demand across 12 homes will also be high; expect tight net production margins.")
     elif temp_f > 77:
-        derate = round((temp_f - 77) * 0.35, 1)
+        derate = round((temp_f - 77) * 5 / 9 * 0.35, 1)
         temp_note = f"At {temp_f}°F there's minor derating (~{derate}%), but conditions remain productive."
     elif temp_f >= 32:
         temp_note = (f"At {temp_f}°F panels run cool — slightly better efficiency than the 77°F rating point. "
@@ -573,7 +574,7 @@ def _fetch_api_examples():
     ex.append((SYS_,
         f"It's {temp_f}°F outside. How does temperature affect our solar output?",
         f"{temp_note} Current output: {prod_kw}kW. "
-        "Crystalline silicon loses ~0.35–0.45% per °F above 77°F (25°C)."
+        "Crystalline silicon loses ~0.35–0.45% per °C above 25°C (77°F)."
     ))
 
     # ── 4. Grid pricing strategy ────────────────────────────────────────────────

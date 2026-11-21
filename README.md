@@ -935,7 +935,7 @@ the-gemma4-good-hackathon-solarhive/
 | Open-Meteo | GHI solar irradiance (W/m²), historical hourly | api.open-meteo.com — no API key | Free |
 | OpenWeatherMap | Real-time temperature, wind, humidity, cloud cover, sunrise/sunset | openweathermap.org/api — free API key | Free |
 | EIA Open Data v2 | Grid fuel mix, renewable %, CO2 intensity | api.eia.gov — free API key | Free |
-| NREL PVWatts v8 | Solar production estimates for cross-validation | developer.nlr.gov, free API key (the code still calls the retired developer.nrel.gov host; see Known Limitations) | Free |
+| NREL PVWatts v8 | Solar production estimates for cross-validation | developer.nlr.gov, free API key (the code calls this host as of November 20, 2026; see Known Limitations) | Free |
 
 **Data principles:** Numbers in the algorithmically generated training
 rows come from API responses. The 413 hand written rows contain author
@@ -956,7 +956,7 @@ data generation. These charts summarize the generated data. They do not validate
 | ![GHI Distribution](datagen_charts/chart_01.png) | ![Hourly Production](datagen_charts/chart_02.png) |
 | **Chart 1:** GHI distribution for Ann Arbor (median 265 W/m²) vs San Mateo (median 364 W/m²) — Michigan receives ~27% less solar irradiance | **Chart 2:** Average hourly production curve (mean ± 1 std). Peak at 1-2pm, Ann Arbor peaks higher but with wider variance |
 | ![Production Heatmap](datagen_charts/chart_03.png) | ![Temperature Derating](datagen_charts/chart_04.png) |
-| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor as coded. It is flat at 1.0 below 77°F, then declines 0.4% per °F. The physical coefficient is about 0.4% to 0.5% per °C. The code therefore overstates thermal loss. This is a known bug (see Known Limitations). |
+| **Chart 3:** Month × hour production heatmaps. Ann Arbor peaks June-July at 45+ kW midday. San Mateo has a broader, flatter production season | **Chart 4:** Temperature derating factor from the original data generation run. It is flat at 1.0 below 77°F, then declines 0.4% per °F. The physical coefficient is about 0.4% to 0.5% per °C, so that run overstated thermal loss. As of November 20, 2026, the code applies 0.4% per °C above 25°C. This chart image predates that fix and needs regeneration (see Known Limitations). |
 
 ### Environmental Correlations
 
@@ -1135,7 +1135,7 @@ In one SolarHive run, the A4B variants scored 3 of 3 and the E4B variants scored
 |---------|--------|-----------|
 | OpenWeatherMap | [openweathermap.org/api](https://openweathermap.org/api) | 1,000 calls/day |
 | EIA Open Data | [api.eia.gov](https://www.eia.gov/opendata) | Free key. EIA documents throttling. See the provider's rate limits. |
-| NREL PVWatts | [developer.nlr.gov](https://developer.nlr.gov/docs/solar/pvwatts/v8/) | Free key. See the provider's rate limits. The old developer.nrel.gov host stopped serving requests on May 29, 2026. The code still calls it (see Known Limitations). |
+| NREL PVWatts | [developer.nlr.gov](https://developer.nlr.gov/docs/solar/pvwatts/v8/) | Free key. See the provider's rate limits. The old developer.nrel.gov host stopped serving requests on May 29, 2026. As of November 20, 2026, the code calls developer.nlr.gov. Existing API keys work on the new host (see Known Limitations). |
 
 ### Local Deployment via Ollama
 
@@ -1359,24 +1359,33 @@ that effect.
   NF4 file is 48.34 GB on disk. It does not fit a 16 GB or 40 GB GPU in
   a single GPU load.
 
-**Known issues that need a code fix**
+**Known issues fixed in code that still need a rerun**
 
-- **Temperature derating uses the wrong unit.** The code applies 0.4%
-  loss per °F above 77°F (`solarhive_datagen.py` lines 149, 886, 1998,
-  5379 and 5384, `solarhive_inference.py` line 452,
-  `solarhive_e4b_litert_v3.1.py` line 440 and `web-litert/app.js` line
-  127). The
-  physical coefficient is about 0.4% to 0.5% per °C. The code therefore
-  overstates thermal loss. The generated training data and model
-  answers carry this error. Fixing it requires a code change, a dataset
-  regeneration and a new fine tune.
-- **The NREL API host is retired.** The code calls
-  `developer.nrel.gov` (`solarhive_datagen.py` line 185,
-  `solarhive_inference.py` line 602, `solarhive_e4b_litert_v3.1.py` line
-  571). That host stopped serving requests on May 29, 2026 and does not
-  redirect. The current host is `developer.nlr.gov`. The PVWatts tool
-  fails until the code is updated. Any rerun of data generation or
-  inference needs this fix first.
+- **Temperature derating used the wrong unit.** The original code
+  applied 0.4% loss per °F above 77°F. The physical coefficient is
+  about 0.4% to 0.5% per °C, so the original code overstated thermal
+  loss. As of November 20, 2026, the code converts the temperature to
+  Celsius and applies 0.4% loss per °C above 25°C (77°F), with the same
+  0.75 floor: `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))`. The fix
+  covers `solarhive_datagen.py`, `solarhive_finetune.py`,
+  `solarhive_inference.py`, `solarhive_e4b_litert_v3.1.py`, the matching
+  notebooks and `web-litert/app.js`. The published dataset
+  (`Truthseeker87/solarhive-community-solar-multimodal`), the fine-tuned
+  models and all reported results came from the old formula. They need
+  a dataset regeneration, a new fine tune and a rerun. Several
+  hand-written tool examples in `solarhive_datagen.py` (lines 4320,
+  4331, 4353, 4548, 4616 and 4632) still hold derating values from the
+  old formula and need an update before the regeneration.
+- **The NREL API host moved.** The original code called
+  `developer.nrel.gov`. That host stopped serving requests on May 29,
+  2026 and does not redirect. As of November 20, 2026, the code calls
+  `https://developer.nlr.gov/api/pvwatts/v8.json` in
+  `solarhive_datagen.py`, `solarhive_inference.py`,
+  `solarhive_e4b_litert_v3.1.py` and the matching notebooks. Existing
+  API keys keep working on the new host. The published dataset, the
+  fine-tuned models and all reported results came from runs against the
+  old host and the old derating formula. They need regeneration and a
+  rerun.
 
 **Impact**
 
@@ -1442,7 +1451,7 @@ The Special Technology Tracks recognize outstanding technical achievement using 
 
 ## Corrections (November 20, 2026)
 
-I corrected the following items on **November 20, 2026** after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data, models and code are unchanged. The two code issues in Known Limitations still need a fix and a rerun.
+I corrected the following items on **November 20, 2026** after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data and models are unchanged. A later commit on November 20, 2026 fixed the two code issues in Known Limitations. The dataset, the models and the reported results still need regeneration and a rerun.
 
 | Item | Previously stated | Corrected to | Cause |
 |---|---|---|---|
@@ -1458,8 +1467,10 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | E4B (c) and (d) | E4B regresses on (c) consistently across the family | Cloud E4B failed (c). GGUF failed (d). | Internal contradiction |
 | Cloud GPU | A100 class | RTX PRO 6000 Blackwell | Notebook 3, cell 3 |
 | Compounding loss | About 34% | About 36% | Arithmetic: 0.70 × 0.60 × 0.95³ |
-| Derating chart | Validates the derating formula | Code uses 0.4% per °F, not per °C. Known bug. | `solarhive_datagen.py` line 149 |
-| NREL host | developer.nrel.gov, unlimited | developer.nlr.gov. Old host retired May 29, 2026. Code still uses the old host. | NLR domain transition notice |
+| Derating chart | Validates the derating formula | The original code used 0.4% per °F, not per °C. The code now uses 0.4% per °C (see the derating formula row). The chart image predates the fix. | `solarhive_datagen.py` line 149 |
+| NREL host | developer.nrel.gov, unlimited | developer.nlr.gov. Old host retired May 29, 2026. The code now uses the new host (see the PVWatts endpoint row). | NLR domain transition notice |
+| Derating formula in code (November 20, 2026) | `max(0.75, 1.0 - 0.004 * max(0, temp_f - 77))`, 0.4% per °F above 77°F | `max(0.75, 1.0 - 0.004 * max(0, temp_c - 25))` with `temp_c = (temp_f - 32) * 5 / 9`, 0.4% per °C above 25°C. The published dataset, the fine-tuned models and all reported results used the old formula and need regeneration and a rerun. | Panel temperature coefficients are stated per °C |
+| PVWatts endpoint in code (November 20, 2026) | `https://developer.nrel.gov/api/pvwatts/v8.json` | `https://developer.nlr.gov/api/pvwatts/v8.json`. Existing API keys keep working. The published dataset and reported results came from runs against the old host and need a rerun. | [NLR domain transition notice](https://developer.nlr.gov/docs/nlr-domain-transition/) |
 | API free tiers | EIA and NREL "Unlimited" | Free key; see provider rate limits | EIA documents throttling |
 | Training rows | 551 training examples | 1,727 rows | Dataset and notebook 1 |
 | E2B vision encoder | About 75M | About 150M | Gemma 4 model card |
@@ -1479,7 +1490,7 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | VQA examples | Mode 2 and Mode 3 replies shown as capability | Labeled illustrative. VQA not scored. | Notebook 3 used placeholder images |
 | Decode latency | 2 to 6 s per answer | Removed | No measurement in the repository |
 | Test file | `tests/test_inference_script.py` with 24 tests | Removed | File not in the repository |
-| Reproducibility | Weights re-derived bit identically; dataset "fully reproducible" from the pipeline | Exact reproduction not tested. A data rerun needs the NLR host fix. | No rerun was done. The code still calls the retired API host. |
+| Reproducibility | Weights re-derived bit identically; dataset "fully reproducible" from the pipeline | Exact reproduction not tested. The current code differs from the code that produced the published dataset, because of the November 20, 2026 derating and host fixes. | No rerun was done. |
 | Private assets | Dataset and weights private until submission; HF token required | Public; HF token optional | Hugging Face pages are public |
 | Impact figures | Curtailment, CO2, price and return figures | Removed. Only the 94,501 kWh PVWatts baseline is kept. | No sources cited |
 | Links | `../mobile-cactus/`, `ai-edge-torch` examples path, unpublished `solarhive-e2b-merged` | `mobile-cactus/`, `litert-torch`, E2B link removed | Broken or unpublished links |
