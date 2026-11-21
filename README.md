@@ -444,7 +444,7 @@ training corpus, targeting both cloud and edge deployment:
   taxonomy — 106 *should-call*, 53 *should-not-call*, 10 *unable-to-answer*,
   6 *follow-up clarification*, 8 failure-recovery — so the model learns
   when to call tools, when to refuse politely, when to admit a tool
-  can't answer, and when to ask a clarifying question
+  cannot answer, and when to ask a clarifying question
 - **14 image-grounded Q&A turns** from 7 manually-labeled Ann Arbor sky
   photographs (cloud type + percentage cloud cover, expected production
   traced via the same temperature-derated GHI formula used elsewhere)
@@ -1081,7 +1081,7 @@ The Hugging Face model cards currently label some of these cloud results "inferr
 
 A4B stated that it had no air quality tool and offered to check weather data instead. E4B also declined that request and did not fabricate data. The cloud E4B variants failed only probe (c) in this run.
 
-**Finding for deployment:** On these probes, the cloud E4B variants failed probe (c) and the E4B GGUF failed probe (d). The A4B variants passed all three. The result is consistent with the idea that smaller models more readily fill in missing parameters. It does not confirm that idea. **Deployment recommendation:** A4B (cloud) for under-specified or out-of-scope queries; E4B (edge) for well-specified, in-scope routing where (b)-category behavior dominates. A future fine-tune could increase E4B's *follow-up clarification* example count (currently 6) and *unable-to-answer* count (currently 10) to close the gap.
+**Finding for deployment:** On these probes, the cloud E4B variants failed probe (c) and the E4B GGUF failed probe (d). The A4B variants passed all three. The result is consistent with the idea that smaller models more readily fill in missing parameters. It does not confirm that idea. **Routing hypothesis (not established):** A4B in the cloud may suit under specified or out of scope queries, and E4B on the edge may suit well specified, in scope routing. Three probes in a single run cannot support a routing rule. A larger held out probe set would need to test it. A future fine-tune could increase E4B's *follow-up clarification* example count (currently 6) and *unable-to-answer* count (currently 10) to close the gap.
 
 #### Caveat — Multi-Token Prediction (MTP) drafters: future iteration, not in the measured numbers above
 
