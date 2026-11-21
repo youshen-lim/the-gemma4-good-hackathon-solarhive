@@ -46,7 +46,7 @@ equipment.
 
 ## Why This Matters to Me
 
-I chose Ann Arbor, Michigan as SolarHive's prototype location because I live here — after years in New York and Boston. The project models suburban rooftop solar conditions and does not survey actual shading at local sites.
+I chose Ann Arbor, Michigan as SolarHive's prototype location because I live here. I came here after years in New York and Boston. The project models suburban rooftop solar conditions and does not survey actual shading at local sites.
 
 My motivation runs deeper than a hackathon:
 
@@ -525,13 +525,13 @@ scored 4 of 5 on tool routing, the same as the BF16 merged variant
 (notebook 3). The earlier 8 question NF4 check is reported on the NF4
 model card. Its notebook is not in this repository. The six model repos
 (`solarhive-26b-a4b-{lora,merged,nf4}`,
-`solarhive-e4b-{lora,ollama,gguf}`) carry the v2 weights. Some model
-card text conflicts with the archived runs (see Known Limitations). The `-e4b-lora` repo was added separately to
+`solarhive-e4b-{lora,ollama,gguf}`) carry the v2 weights. On November 21,
+2026 I aligned the model cards with the archived runs on the points listed in Corrections. The `-e4b-lora` repo was added separately to
 expose the E4B LoRA delta as a standalone artifact (it had previously
 only existed as a Drive backup; the merge → safetensors push from the
 fine-tuning notebook was the only HF artifact for the E4B family until
-that step). It bootstraps the `solarhive_merge_e4b.ipynb` recipe so
-that notebook is now runnable on a fresh Colab session.
+that step). It bootstraps the `solarhive_merge_e4b.ipynb` recipe.
+That notebook is not in this repository.
 
 ### Feature 4 — Edge GGUF Deployment *(Ollama + llama.cpp Special Tech Tracks)*
 
@@ -997,9 +997,9 @@ data generation. These charts summarize the generated data. They do not validate
 
 > **Note:** In the May 2026 run (notebook 3), the 26B A4B BF16 merged
 > model used 52.4 GB of GPU memory and the NF4 model used 49.2 GB on one
-> GPU. T4 x2 (32 GB) cannot run this model. This README previously said
-> that BitsAndBytes NF4 cannot offload to CPU. The NF4 model card says
-> it can load with `device_map="auto"`. This conflict is not resolved.
+> GPU. T4 x2 (32 GB) cannot run this model. The archived runs do not test
+> a CPU offload load with `device_map="auto"`, and the NF4 model card no
+> longer claims one.
 
 ### Multi-Variant Inference Benchmark
 
@@ -1039,7 +1039,7 @@ Sampling defaults across all variants: `temperature=1.0, top_p=0.95, top_k=64` �
 
 | # | Variant | Q&A (recorded, not graded) | Tool | When2Call | Total (Q&A + Tool) | Backend | Hardware | Source |
 |---|---------|:-:|:-:|:-:|:-:|---|---|---|
-| — | A4B LoRA + base (baseline) | 5/5 | 4/5 | **3/3** | **9/10** | transformers + Unsloth | Colab Pro G4 GPU | Notebook 3, cells 31 and 33 |
+| Not applicable | A4B LoRA + base (baseline) | 5/5 | 4/5 | **3/3** | **9/10** | transformers + Unsloth | Colab Pro G4 GPU | Notebook 3, cells 31 and 33 |
 | 1 | E4B LoRA + base | 5/5 | **5/5** | 2/3 | **10/10** | transformers + Unsloth | Colab Pro G4 GPU | Notebook 3, cell 39 |
 | 2 | E4B merged | 5/5 | 4/5 | 2/3 | **9/10** | transformers BF16 | Colab Pro G4 GPU | Notebook 3, cell 41 |
 | 3 | **E4B GGUF** | 5/5 | **5/5** | **2/3** | **10/10** | **Ollama HTTP raw + manual prompt builder** | **CPU-only Surface Pro 8 (i5-1135G7, 16 GB RAM, external USB drive for GGUF)** | Local Ollama harness run. Results file not committed. |
@@ -1048,7 +1048,7 @@ Sampling defaults across all variants: `temperature=1.0, top_p=0.95, top_k=64` �
 
 The Q&A column is not graded. The script records 5 of 5 for every variant once it generates five answers. Only the Tool and When2Call columns are scored by code. All scores come from the final May 2026 run, except the GGUF row.
 
-The TQ5 multi-call probe (*"Compare today's irradiance forecast across Ann Arbor, Phoenix, Seattle"*) uses lenient scoring (`min_calls=2`) and is the discriminator for the 5/5 vs 4/5 tool-routing column. Only E4B LoRA + E4B GGUF chained the multi-city tool calls; the four 4/5 variants selected a single grounded answer ("forecasts vary by location") rather than chaining lookups. Each variant ran once at temperature 1.0. A repeated run would show how stable the result is.
+The TQ5 multi-call probe (*"Compare today's irradiance forecast across Ann Arbor, Phoenix, Seattle"*) uses lenient scoring (`min_calls=2`) and is the discriminator for the 5/5 vs 4/5 tool-routing column. In notebook 3, only E4B LoRA chained the multi-city tool calls (three `get_weather` calls). E4B merged made one call, and the three A4B variants made no tool call. The E4B GGUF also scored 5/5, but its results file is not committed, and the GGUF card cannot confirm which tool prompts ran. Each variant ran once at temperature 1.0. A repeated run would show how stable the result is.
 
 **Cross-variant observations from one run:**
 
@@ -1494,9 +1494,9 @@ The Special Technology Tracks recognize outstanding technical achievement using 
 
 ---
 
-## Corrections (November 20, 2026)
+## Corrections (November 20 and 21, 2026)
 
-I corrected the following items on **November 20, 2026** after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data and models are unchanged. Later commits on November 20, 2026 fixed the three code issues in Known Limitations. The dataset, the models and the reported results still need regeneration and a rerun.
+I corrected the following items on **November 20, 2026**, and added the rows dated November 21, 2026, after I rechecked this README against the archived notebooks, the code and the Hugging Face pages. The data and models are unchanged. Later commits on November 20, 2026 fixed the three code issues in Known Limitations. The dataset, the models and the reported results still need regeneration and a rerun.
 
 | Item | Previously stated | Corrected to | Cause |
 |---|---|---|---|
@@ -1559,6 +1559,11 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Card conflict status (November 21, 2026) | Resolved | Lists the card items aligned on November 21, 2026 | The earlier wording claimed more than the card updates covered |
 | Base model ID casing (November 21, 2026) | `google/gemma-4-26b-a4b-it` | `google/gemma-4-26B-A4B-it` | Canonical Hugging Face model ID. The lowercase ID resolves only through a redirect. |
 | E4B LoRA adapter size (November 21, 2026) | About 200 MB | About 165 MB | `adapter_model.safetensors` in `solarhive-e4b-lora` is 165,012,392 bytes in the Hugging Face file listing |
+| NF4 CPU offload note (November 21, 2026) | This README and the NF4 model card disagree on CPU offload. "This conflict is not resolved." | The archived runs do not test a CPU offload load with `device_map="auto"`, and the NF4 model card no longer claims one. | The NF4 card was corrected on November 21, 2026 |
+| Model card status note (November 21, 2026) | Some model card text conflicts with the archived runs (see Known Limitations) | The cards were aligned with the archived runs on November 21, 2026 on the points listed in this table | Known Limitations has no card item |
+| Multi-city tool probe (November 21, 2026) | E4B LoRA and E4B GGUF chained the multi-city calls. The four 4/5 variants gave a single grounded answer. | Only E4B LoRA chained the calls in notebook 3. E4B merged made one call. The three A4B variants made no tool call. The GGUF results file is not committed. | Notebook 3, cells 31, 39, 41, 45 and 47. The GGUF card cannot confirm which tool prompts ran. |
+| Merge notebook (November 21, 2026) | `solarhive_merge_e4b.ipynb` is now runnable on a fresh Colab session | That notebook is not in this repository | No file with that name is in the repository or its history |
+| `data_principles.md` (November 21, 2026) | No synthetic or hallucinated numbers; 9 to 67% hallucination rates; held out probes and questions; `test_ollama_tools.py`; Unsloth 2026.4.4; earlier training metrics with no note | Hand written rows contain author written figures; the paper wording used in this README; not held out; `solarhive_inference_e4b_gguf_ollama.py`; Unsloth 2026.4.5; a dated note that sections 7.2 to 7.5 describe an earlier run | The file had not changed since May 2026 |
 
 I rechecked the scores, sizes, dataset counts, hardware, links and code paths against `archive/final_run/`, `solarhive_inference.py`, `solarhive_datagen.py`, `solarhive_inference_e4b_gguf_ollama.py` and the Hugging Face pages on November 20, 2026. I also rechecked the Gemma 4 model card, the When2Call paper, the LiteRT Torch releases, the NVIDIA Jetson specification page and the `solarhive-e4b-cactus` card on November 20, 2026.
 
