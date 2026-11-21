@@ -494,7 +494,7 @@ Each variant ran once at the Kaggle-recommended sampling defaults
 selected the expected tools on 4 of 5 routing prompts.*
 
 **Precision pipeline — BF16 is Gemma 4's native release format.** Google
-publishes the open-source [Gemma 4 base](https://huggingface.co/google/gemma-4-26b-a4b-it)
+publishes the open-source [Gemma 4 base](https://huggingface.co/google/gemma-4-26B-A4B-it)
 in BF16; there is no FP32 release to begin with. Our LoRA fine-tuning
 runs at BF16 over that BF16 base, and Unsloth's `save_pretrained_merged(method="merged_16bit")`
 folds the LoRA delta into the base weights at the same BF16 precision.
@@ -1011,7 +1011,7 @@ has a `_RUN_<variant>` skip flag so you can opt out of slow ones.
 
 | # | Variant | HF repo | Loader | Format on disk | Size |
 |---|---------|---------|--------|----------------|-----:|
-| 1 | **E4B LoRA + base** | [`solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | Unsloth `FastVisionModel` (BF16) | LoRA adapters over kagglehub-cached base | ~200 MB |
+| 1 | **E4B LoRA + base** | [`solarhive-e4b-lora`](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | Unsloth `FastVisionModel` (BF16) | LoRA adapters over kagglehub-cached base | About 165 MB |
 | 2 | **E4B merged** | [`solarhive-e4b-ollama`](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | transformers BF16 | LoRA-merged BF16 safetensors, single file | ~16 GB |
 | 3 | **E4B GGUF** (Ollama) | [`solarhive-e4b-gguf`](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | Ollama HTTP `/api/generate` (raw mode) | Q4_K_M GGUF | ~5 GB |
 | 4 | **A4B merged** | [`solarhive-26b-a4b-merged`](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | transformers BF16 | LoRA-merged BF16 safetensors, sharded into 2 files (49.9 + 1.7 GB + `model.safetensors.index.json`) | ~52 GB |
@@ -1457,7 +1457,7 @@ that effect.
 | **26B A4B LoRA** | [solarhive-26b-a4b-lora](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-lora) | Cloud LoRA adapters via Unsloth (Unsloth track) |
 | **26B A4B NF4** | [solarhive-26b-a4b-nf4](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-nf4) | Pre-quantized 4-bit cloud model. 48.34 GB on disk. Used 49.2 GB of GPU memory in the May 2026 run. |
 | **26B A4B Merged** | [solarhive-26b-a4b-merged](https://huggingface.co/Truthseeker87/solarhive-26b-a4b-merged) | Full BF16 merged cloud model |
-| **E4B LoRA** | [solarhive-e4b-lora](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | E4B adapter weights (~200 MB) — apply over base via Unsloth |
+| **E4B LoRA** | [solarhive-e4b-lora](https://huggingface.co/Truthseeker87/solarhive-e4b-lora) | E4B adapter weights (about 165 MB) — apply over base via Unsloth |
 | **E4B safetensors** | [solarhive-e4b-ollama](https://huggingface.co/Truthseeker87/solarhive-e4b-ollama) | Edge model — merged safetensors source for transformers / GGUF conversion via llama.cpp |
 | **E4B GGUF** | [solarhive-e4b-gguf](https://huggingface.co/Truthseeker87/solarhive-e4b-gguf) | **Edge deployment.** Q4_K_M GGUF + 992 MB mmproj for Ollama / llama.cpp on 16 GB CPU laptop. 5 of 5 tool routing in one local run (Q&A not graded; results file not committed). (Ollama + llama.cpp tracks) |
 | **Dataset** | [solarhive-community-solar-multimodal](https://huggingface.co/datasets/Truthseeker87/solarhive-community-solar-multimodal) | 1,727 training examples (1,713 text + 14 image-grounded) |
@@ -1504,7 +1504,7 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Score sources | 8/8 and 9/10 shown without a clear test set | 8/8 is the earlier April 2026 fine tune check. 9/10 and 10/10 are the final May 2026 inference run. | The two checks use different tool prompts |
 | When2Call probes | "Held-out" probes | Not held out. Close paraphrases appear in the training data. Lenient keyword matcher. | `solarhive_datagen.py` lines 2717, 5079, 5107 |
 | When2Call source labels | Three cloud variants "inferred" by lossless equivalence | Measured in a single run (notebook 3). The Hugging Face cards were corrected to match on November 21, 2026. | Notebook 3, cells 39, 45 and 47 print direct results |
-| Hugging Face card conflicts (November 21, 2026) | The cards label some When2Call results "inferred", and several card sizes, scores and probe descriptions conflict with the archived runs | Resolved. The cards were corrected on November 21, 2026 to match notebook 3 and this README | Card updates reviewed by Claude and Codex |
+| Hugging Face card conflicts (November 21, 2026) | The cards label some When2Call results "inferred", and several card sizes, scores and probe descriptions conflict with the archived runs | On November 21, 2026 I aligned the When2Call labels, scores, sizes, probe descriptions, base model ID casing and adapter config notes in the cards with notebook 3 and this README. This row does not cover other card text. | Card updates reviewed by Claude and Codex |
 | When2Call paper | 9 to 67% tool hallucination rates on (c) and (d) | Removed. The paper links missing follow up and unable to answer data to higher hallucination. | The range is not stated in the paper and is not per category |
 | NF4 memory | About 16 GB; fits A100 40 GB | 49.2 GB GPU memory in the May 2026 run. 48.34 GB on disk. | Notebook 3, cell 47; Hugging Face file listing |
 | Merged A4B size | About 48 GB | 51.61 GB on disk | Hugging Face file listing (49.91 GB and 1.70 GB shards) |
@@ -1556,6 +1556,9 @@ I corrected the following items on **November 20, 2026** after I rechecked this 
 | Grid chart wording | CAISO grid "dramatically cleaner" | Neutral caption | Unsupported wording |
 | Project scope | Intelligence and optimization layer; operates at 12 to 200 homes | Learning prototype. Models 12 homes. | No equipment control; no real community test |
 | Location rationale | Suburban landscape eliminates shading; ideal testbed | Models suburban rooftop conditions. No shading survey. | No shading survey in the repository |
+| Card conflict status (November 21, 2026) | Resolved | Lists the card items aligned on November 21, 2026 | The earlier wording claimed more than the card updates covered |
+| Base model ID casing (November 21, 2026) | `google/gemma-4-26b-a4b-it` | `google/gemma-4-26B-A4B-it` | Canonical Hugging Face model ID. The lowercase ID resolves only through a redirect. |
+| E4B LoRA adapter size (November 21, 2026) | About 200 MB | About 165 MB | `adapter_model.safetensors` in `solarhive-e4b-lora` is 165,012,392 bytes in the Hugging Face file listing |
 
 I rechecked the scores, sizes, dataset counts, hardware, links and code paths against `archive/final_run/`, `solarhive_inference.py`, `solarhive_datagen.py`, `solarhive_inference_e4b_gguf_ollama.py` and the Hugging Face pages on November 20, 2026. I also rechecked the Gemma 4 model card, the When2Call paper, the LiteRT Torch releases, the NVIDIA Jetson specification page and the `solarhive-e4b-cactus` card on November 20, 2026.
 
